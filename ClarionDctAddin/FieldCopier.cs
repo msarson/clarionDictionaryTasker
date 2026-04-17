@@ -90,6 +90,17 @@ namespace ClarionDctAddin
 
         public static ApplyResult Apply(List<PlanItem> plan, object dict, object viewContent, string dctPath)
         {
+            return Apply(plan, dict, viewContent, dctPath, null, null);
+        }
+
+        public static ApplyResult Apply(
+            List<PlanItem> plan,
+            object dict,
+            object viewContent,
+            string dctPath,
+            Action<int, string> onProgress,
+            Func<bool> isCancelled)
+        {
             CollectionInternalsDumped = false;
             var result = new ApplyResult();
 
@@ -121,11 +132,20 @@ namespace ClarionDctAddin
                 return result;
             }
 
+            int done = 0;
             foreach (var item in plan)
             {
-                if (item.Action == PlanAction.Skip) { result.SkippedCount++; continue; }
+                if (isCancelled != null && isCancelled())
+                {
+                    result.Messages.Add("Cancelled by user after " + done + " / " + plan.Count + " items.");
+                    break;
+                }
 
                 var tag = item.TargetTableName + "." + item.FieldLabel;
+                if (onProgress != null) onProgress(done, tag);
+
+                if (item.Action == PlanAction.Skip) { result.SkippedCount++; done++; continue; }
+
                 try
                 {
                     CopyAndAdd(item.SourceField, item.TargetTable, result, tag);
@@ -137,7 +157,9 @@ namespace ClarionDctAddin
                     var inner = ex.InnerException ?? ex;
                     result.Messages.Add(tag + ": " + inner.GetType().Name + " - " + inner.Message);
                 }
+                done++;
             }
+            if (onProgress != null) onProgress(done, "Finalising...");
 
             if (result.AddedCount > 0)
             {

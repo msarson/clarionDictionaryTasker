@@ -292,8 +292,28 @@ namespace ClarionDctAddin
                 var dr = dlg.ShowDialog(this);
                 if (dr != DialogResult.OK) return;
 
-                var view   = DictModel.GetActiveDictionaryView();
-                var result = FieldCopier.Apply(plan, dict, view, DictModel.GetDictionaryFileName(dict));
+                var view    = DictModel.GetActiveDictionaryView();
+                var dctPath = DictModel.GetDictionaryFileName(dict);
+
+                var progress = new BatchProgressDialog(plan.Count);
+                Enabled = false;
+                progress.Show(this);
+                progress.Report(0, "Starting...");
+                FieldCopier.ApplyResult result;
+                try
+                {
+                    result = FieldCopier.Apply(
+                        plan, dict, view, dctPath,
+                        delegate(int done, string label) { progress.Report(done, label); },
+                        delegate { return progress.CancelRequested; });
+                }
+                finally
+                {
+                    progress.Close();
+                    progress.Dispose();
+                    Enabled = true;
+                    Activate();
+                }
                 ShowResult(result);
             }
         }
