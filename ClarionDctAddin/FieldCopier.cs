@@ -150,26 +150,52 @@ namespace ClarionDctAddin
             if (copyMethod == null)
                 throw new InvalidOperationException("Cannot find Copy(parent, bool) on " + sourceField.GetType().FullName);
 
+            // quiet = false: the UniqueDataDictionaryItemList<T> relies on the ItemAdded
+            // event to register a field in its "added items" list. That list is what
+            // Clarion's save code iterates over. Quiet mode suppresses that event, so
+            // the field never reaches disk even though it's visible in the editor.
             object newField;
-            try { newField = copyMethod.Invoke(sourceField, new object[] { targetTable, true }); }
+            try { newField = copyMethod.Invoke(sourceField, new object[] { targetTable, false }); }
             catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
             if (newField == null) throw new InvalidOperationException("Copy returned null.");
 
-            // Copy may already have registered the field on the parent — check.
+            // Copy may already have registered the field on the parent — check before re-adding.
+            bool alreadyIn = false;
             var targetFields = DictModel.GetProp(targetTable, "Fields") as IEnumerable;
             if (targetFields != null)
             {
                 foreach (var f in targetFields)
-                    if (ReferenceEquals(f, newField)) return;
+                    if (ReferenceEquals(f, newField)) { alreadyIn = true; break; }
             }
 
-            var addMethod = targetTable.GetType()
-                .GetMethod("AddField", BindingFlags.Public | BindingFlags.Instance);
-            if (addMethod == null)
-                throw new InvalidOperationException("Cannot find AddField on " + targetTable.GetType().FullName);
+            if (!alreadyIn)
+            {
+                var addMethod = targetTable.GetType()
+                    .GetMethod("AddField", BindingFlags.Public | BindingFlags.Instance);
+                if (addMethod == null)
+                    throw new InvalidOperationException("Cannot find AddField on " + targetTable.GetType().FullName);
+                try { addMethod.Invoke(targetTable, new object[] { newField }); }
+                catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
+            }
 
-            try { addMethod.Invoke(targetTable, new object[] { newField }); }
-            catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
+            // Post-insert housekeeping so the field actually persists:
+            //   SetInFile()        on DDField — flips IsInFile=true
+            //   ChildListTouched() on the DDFile and DDDataDictionary — marks dirty for save
+            // All internal methods — best-effort and non-fatal.
+            TryInvokeNoArgs(newField,    "SetInFile",         true);
+            TryInvokeNoArgs(targetTable, "ChildListTouched",  true);
+            var dict = DictModel.GetProp(targetTable, "DataDictionary");
+            TryInvokeNoArgs(dict,        "ChildListTouched",  true);
+        }
+
+        static void TryInvokeNoArgs(object target, string methodName, bool includeNonPublic)
+        {
+            if (target == null) return;
+            var flags = BindingFlags.Public | BindingFlags.Instance;
+            if (includeNonPublic) flags |= BindingFlags.NonPublic;
+            var m = target.GetType().GetMethod(methodName, flags, null, Type.EmptyTypes, null);
+            if (m == null) return;
+            try { m.Invoke(target, null); } catch { /* diagnostic-only */ }
         }
 
         static object FindFieldByLabel(object table, string label)
