@@ -205,6 +205,17 @@ namespace ClarionDctAddin
             if (newKey == null) throw new InvalidOperationException("Copy returned null.");
             steps.Add("copy");
 
+            // Force a fresh GUID so the copy doesn't collide with its source in
+            // the native TPS record store.
+            try
+            {
+                var gen = newKey.GetType().GetMethod("GenerateNewId",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    null, Type.EmptyTypes, null);
+                if (gen != null) { gen.Invoke(newKey, null); steps.Add("newId"); }
+            }
+            catch { /* best effort */ }
+
             // 2. One-time shape dump of the first copied key so we can see the real
             //    name of the components collection and the component's field ref.
             if (!FirstKeyDumped)
@@ -214,9 +225,12 @@ namespace ClarionDctAddin
                 catch (Exception ex) { result.Messages.Add("Shape dump: " + ex.GetType().Name); }
             }
 
-            // 3. Pre-reg state (same recipe fields needed).
+            // 3. Pre-reg state. Deliberately NOT setting stored=true on keys —
+            //    unlike fields, the key-save path routes on that flag straight
+            //    to DoUpdate which looks up the record by GUID and throws
+            //    "Record X not found" for a newly-inserted key. Leave stored
+            //    as whatever Copy produced (false) so save picks Insert.
             TrySetObjectField(newKey, "parentItem", targetTable);
-            TrySetBoolField  (newKey, "stored",          true);
             TrySetBoolField  (newKey, "itemHasChanged",  true);
 
             // 4. Remap components BEFORE registration so the key looks consistent
@@ -259,9 +273,8 @@ namespace ClarionDctAddin
             int n1 = CountEnum(DictModel.GetProp(targetTable, "Keys"));
             steps.Add("n1=" + n1);
 
-            // 6. Post-reg repair.
+            // 6. Post-reg repair. Same rationale: keep stored off for keys.
             TrySetObjectField(newKey, "parentItem", targetTable);
-            TrySetBoolField  (newKey, "stored",          true);
             TrySetBoolField  (newKey, "itemHasChanged",  true);
 
             // 7. Rewrite ExternalName to <TargetTable>_<KeyLabel> so every copy
