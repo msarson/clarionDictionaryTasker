@@ -273,13 +273,81 @@ namespace ClarionDctAddin
             var dict = DictModel.GetProp(targetTable, "DataDictionary");
             if (TryInvokeNoArgs(dict, "ChildListTouched", true)) steps.Add("dict.ChildListTouched");
 
-            // 6. Diagnostic — report the post-state of the new field.
+            // 6. Flip Touched=true so Clarion's save pass treats the field as pending.
+            //    Property setter is likely non-public; fall through to backing field if so.
+            if (TrySetBoolProp(newField, "Touched", true)) steps.Add("Touched<-true(prop)");
+            else if (TrySetBoolField(newField, "touched", true)) steps.Add("Touched<-true(field)");
+            else if (TrySetBoolField(newField, "_touched", true)) steps.Add("Touched<-true(_field)");
+
+            // 7. Also ensure the field is in the Fields collection's internal "added items"
+            //    tracker. The collection exposes ClearAddedItems() but no public property;
+            //    the backing list is a non-public field. Try the common names.
+            var fieldsColl = DictModel.GetProp(targetTable, "Fields");
+            if (fieldsColl != null)
+            {
+                var added = GetNonPublicMember(fieldsColl, "addedItems")
+                         ?? GetNonPublicMember(fieldsColl, "AddedItems")
+                         ?? GetNonPublicMember(fieldsColl, "_addedItems");
+                if (added is IList)
+                {
+                    var list = (IList)added;
+                    bool inTracker = false;
+                    foreach (var x in list) if (ReferenceEquals(x, newField)) { inTracker = true; break; }
+                    if (!inTracker) { try { list.Add(newField); steps.Add("addedItems+="); } catch { steps.Add("addedItems:fail"); } }
+                    else steps.Add("addedItems:present");
+                }
+                else
+                {
+                    steps.Add("addedItems:NF");
+                }
+            }
+
+            // 8. Diagnostic — report the post-state of the new field.
             var isInFile = DictModel.AsString(DictModel.GetProp(newField, "IsInFile")) ?? "?";
             var touched  = DictModel.AsString(DictModel.GetProp(newField, "Touched"))  ?? "?";
             steps.Add("IsInFile=" + isInFile);
             steps.Add("Touched=" + touched);
 
             result.Messages.Add(tag + " : " + string.Join(" > ", steps.ToArray()));
+        }
+
+        static bool TrySetBoolProp(object target, string name, bool value)
+        {
+            if (target == null) return false;
+            var p = target.GetType().GetProperty(name,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (p == null || !p.CanWrite || p.PropertyType != typeof(bool)) return false;
+            try { p.SetValue(target, value, null); return true; } catch { return false; }
+        }
+
+        static bool TrySetBoolField(object target, string name, bool value)
+        {
+            if (target == null) return false;
+            var f = target.GetType().GetField(name,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (f == null || f.FieldType != typeof(bool)) return false;
+            try { f.SetValue(target, value); return true; } catch { return false; }
+        }
+
+        static object GetNonPublicMember(object target, string name)
+        {
+            if (target == null) return null;
+            var t = target.GetType();
+            var f = t.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+            if (f != null) { try { return f.GetValue(target); } catch { } }
+            var p = t.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+            if (p != null && p.CanRead) { try { return p.GetValue(target, null); } catch { } }
+            // Walk base types for inherited non-public members.
+            var bt = t.BaseType;
+            while (bt != null && bt != typeof(object))
+            {
+                f = bt.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+                if (f != null) { try { return f.GetValue(target); } catch { } }
+                p = bt.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+                if (p != null && p.CanRead) { try { return p.GetValue(target, null); } catch { } }
+                bt = bt.BaseType;
+            }
+            return null;
         }
 
         static bool TryInvokeNoArgs(object target, string methodName, bool includeNonPublic)
