@@ -264,7 +264,20 @@ namespace ClarionDctAddin
             TrySetBoolField  (newKey, "stored",          true);
             TrySetBoolField  (newKey, "itemHasChanged",  true);
 
-            // 7. Final report.
+            // 7. Rewrite ExternalName to <TargetTable>_<KeyLabel> so every copy
+            //    gets a unique, target-appropriate external name instead of
+            //    inheriting the source's.
+            var targetName = DictModel.AsString(DictModel.GetProp(targetTable, "Name")) ?? "";
+            var keyLabel   = DictModel.AsString(DictModel.GetProp(newKey,     "Label")) ?? "";
+            if (!string.IsNullOrEmpty(targetName) && !string.IsNullOrEmpty(keyLabel))
+            {
+                var ext = targetName + "_" + keyLabel;
+                bool ok = TrySetProp(newKey, "ExternalName", ext)
+                       || TrySetObjectField(newKey, "externalName", ext);
+                steps.Add(ok ? "ExtName<-" + ext : "ExtName:fail");
+            }
+
+            // 8. Final report.
             steps.Add("comps=" + GetComponentLabels(newKey).Count);
             result.Messages.Add(tag + " : " + string.Join(" > ", steps.ToArray()));
         }
