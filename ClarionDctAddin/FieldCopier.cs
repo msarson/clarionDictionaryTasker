@@ -232,47 +232,110 @@ namespace ClarionDctAddin
             if (newField == null) throw new InvalidOperationException("Copy returned null.");
             steps.Add("copy");
 
-            // 2. Did Copy already register the field in the target's Fields list?
-            bool alreadyIn = false;
-            var targetFields = DictModel.GetProp(targetTable, "Fields") as IEnumerable;
-            if (targetFields != null)
-                foreach (var f in targetFields)
-                    if (ReferenceEquals(f, newField)) { alreadyIn = true; break; }
-
-            if (alreadyIn)
+            // 2. PRE-REGISTRATION STATE SETUP. The hypothesis is that DDFile.InsertField
+            //    (the internal canonical path) gates on these flags. Running it with a
+            //    raw Copy() field ignored our adds; running it after state is set should
+            //    produce a real native TPS record (_C6Ident != 0).
+            TrySetObjectField(newField, "parentItem", targetTable);
+            var locationProp = newField.GetType().GetProperty("Location");
+            if (locationProp != null && locationProp.PropertyType.IsEnum)
             {
-                steps.Add("preReg");
+                try
+                {
+                    var appValue = Enum.Parse(locationProp.PropertyType, "Application");
+                    if (!TrySetProp(newField, "Location", appValue))
+                        TrySetObjectField(newField, "storageLocation", appValue);
+                }
+                catch { /* enum member missing */ }
             }
-            else
+            TrySetBoolField(newField, "stored", true);
+            TrySetBoolField(newField, "itemHasChanged", true);
+            TrySetIntField(newField, "recordOrder", countBefore);
+
+            // Snapshot C6Ident before registration. Non-zero after == native record allocated.
+            var c6Before = DictModel.AsString(DictModel.GetProp(newField, "C6Ident")) ?? "?";
+            steps.Add("C6_0=" + c6Before);
+
+            // 3. REGISTER. Try canonical lifecycle paths before the blunt coll.Add.
+            bool registered = IsInFields(newField, targetTable);
+            if (registered) steps.Add("preReg");
+
+            //    3a. DDFile.InsertField(DDField) — internal. Suspected canonical path.
+            if (!registered)
             {
-                // 3. Call fieldsCollection.Add(newField) directly. This is the method
-                //    Clarion's editor invokes internally — it updates both the items
-                //    GuidKeyedCollection and the addedItems Dictionary<Guid,DDField>
-                //    (the persistence tracker) in one shot. DDFile.InsertField and
-                //    DDFile.AddField turned out to be silent no-ops in this build.
+                var insertField = targetTable.GetType().GetMethod("InsertField",
+                    BindingFlags.NonPublic | BindingFlags.Instance,
+                    null, new[] { newField.GetType() }, null);
+                if (insertField != null)
+                {
+                    try
+                    {
+                        insertField.Invoke(targetTable, new object[] { newField });
+                        steps.Add("InsertField");
+                        registered = IsInFields(newField, targetTable);
+                        if (!registered) steps.Add("InsertField:noReg");
+                    }
+                    catch (TargetInvocationException tie)
+                    {
+                        var ex = tie.InnerException ?? tie;
+                        steps.Add("InsertField:EX(" + ex.GetType().Name + ")");
+                    }
+                }
+            }
+
+            //    3b. DDField.Insert(Int32 position) — public instance lifecycle method.
+            if (!registered)
+            {
+                var selfInsert = newField.GetType().GetMethod("Insert",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null, new[] { typeof(int) }, null);
+                if (selfInsert != null)
+                {
+                    try
+                    {
+                        selfInsert.Invoke(newField, new object[] { countBefore });
+                        steps.Add("self.Insert");
+                        registered = IsInFields(newField, targetTable);
+                        if (!registered) steps.Add("self.Insert:noReg");
+                    }
+                    catch (TargetInvocationException tie)
+                    {
+                        var ex = tie.InnerException ?? tie;
+                        steps.Add("self.Insert:EX(" + ex.GetType().Name + ")");
+                    }
+                }
+            }
+
+            //    3c. Last resort: direct fieldsCollection.Add (managed-only; won't allocate C6Ident).
+            if (!registered)
+            {
                 var fieldsCollection = DictModel.GetProp(targetTable, "Fields");
-                if (fieldsCollection == null)
-                    throw new InvalidOperationException("Target table has no Fields collection.");
-
-                var collAdd = fieldsCollection.GetType()
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(m => m.Name == "Add"
-                                      && m.GetParameters().Length == 1
-                                      && m.GetParameters()[0].ParameterType == newField.GetType());
-                if (collAdd == null)
-                    throw new InvalidOperationException("Fields collection has no Add(" + newField.GetType().Name + ").");
-
-                try { collAdd.Invoke(fieldsCollection, new object[] { newField }); steps.Add("coll.Add"); }
-                catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
+                if (fieldsCollection != null)
+                {
+                    var collAdd = fieldsCollection.GetType()
+                        .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                        .FirstOrDefault(m => m.Name == "Add"
+                                          && m.GetParameters().Length == 1
+                                          && m.GetParameters()[0].ParameterType == newField.GetType());
+                    if (collAdd != null)
+                    {
+                        try { collAdd.Invoke(fieldsCollection, new object[] { newField }); steps.Add("coll.Add(fb)"); }
+                        catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
+                        registered = IsInFields(newField, targetTable);
+                    }
+                }
+                if (!registered)
+                    throw new InvalidOperationException("Could not register field via any known path.");
             }
 
-            // 4. Post-add verification: count, presence, and addedItems tracker.
+            // Post-registration C6Ident check — the key persistence signal.
+            var c6After = DictModel.AsString(DictModel.GetProp(newField, "C6Ident")) ?? "?";
+            steps.Add("C6_1=" + c6After);
+
+            // 4. Verification.
             var targetFieldsCollection = DictModel.GetProp(targetTable, "Fields");
             int countAfter = CountEnumerable(targetFieldsCollection);
-            bool nowIn = false;
-            var fieldsAfter = targetFieldsCollection as IEnumerable;
-            if (fieldsAfter != null)
-                foreach (var f in fieldsAfter) if (ReferenceEquals(f, newField)) { nowIn = true; break; }
+            bool nowIn = IsInFields(newField, targetTable);
             steps.Add("n1=" + countAfter);
             steps.Add("inFields=" + nowIn);
 
@@ -295,42 +358,11 @@ namespace ClarionDctAddin
             var dict = DictModel.GetProp(targetTable, "DataDictionary");
             if (TryInvokeNoArgs(dict, "ChildListTouched", true)) steps.Add("dict.ChildListTouched");
 
-            // 7a. Wire Parent. The Parent property setter reported success last run but
-            //     the getter still returned null — strong sign the setter writes to a
-            //     different backing store than the getter reads. Go straight to the
-            //     parentItem backing field on the DataDictionaryItem base class. Also
-            //     still attempt the property setter so the event subscribers run.
-            if (TrySetObjectField(newField, "parentItem", targetTable)) steps.Add("parentItem<-field");
-            if (TrySetProp(newField, "Parent", targetTable)) steps.Add("Parent<-prop");
-            var parentItemAfter = GetNonPublicMember(newField, "parentItem");
-            steps.Add("parentItem=" + (parentItemAfter == null ? "null" : "set"));
-
-            // 7b. Force Location=Application — this is what a manually-added field has.
-            //     The source field's Location is irrelevant; this flag gates whether the
-            //     field is written to the physical file layout.
-            var locationProp = newField.GetType().GetProperty("Location");
-            if (locationProp != null && locationProp.PropertyType.IsEnum)
-            {
-                try
-                {
-                    var appValue = Enum.Parse(locationProp.PropertyType, "Application");
-                    if (TrySetProp(newField, "Location", appValue)) steps.Add("Loc<-Application(prop)");
-                    else if (TrySetObjectField(newField, "storageLocation", appValue)) steps.Add("Loc<-Application(field)");
-                }
-                catch { steps.Add("Loc<-Application:enumErr"); }
-            }
-
-            // 7c. Flip persistence flags that genuinely-new fields ship without.
-            if (TrySetBoolField(newField, "stored", true)) steps.Add("stored<-true");
-            if (TrySetBoolField(newField, "itemHasChanged", true)) steps.Add("itemHasChanged<-true");
-
-            // 7d. Assign a non-colliding recordOrder at the end of the target list.
-            int targetOrderCount = countAfter;
-            if (TrySetIntField(newField, "recordOrder", targetOrderCount)) steps.Add("recordOrder<-" + targetOrderCount);
-
-            // 8. Flip Touched. Try an explicit set_Touched method too — property setter
-            //    may be hidden from GetProperty() even with NonPublic because the class
-            //    hides the base accessor.
+            // 7. Post-registration state repair. InsertField may re-initialise some of
+            //    these flags during lifecycle; reapply to be safe.
+            TrySetObjectField(newField, "parentItem", targetTable);
+            TrySetBoolField(newField, "stored", true);
+            TrySetBoolField(newField, "itemHasChanged", true);
             if (TrySetBoolProp(newField, "Touched", true)) steps.Add("Touched<-prop");
             else if (TryInvokeSetter(newField, "set_Touched", true)) steps.Add("Touched<-setter");
 
@@ -368,6 +400,14 @@ namespace ClarionDctAddin
             steps.Add("Touched="  + (DictModel.AsString(DictModel.GetProp(newField, "Touched"))  ?? "?"));
 
             result.Messages.Add(tag + " : " + string.Join(" > ", steps.ToArray()));
+        }
+
+        static bool IsInFields(object field, object targetTable)
+        {
+            var fields = DictModel.GetProp(targetTable, "Fields") as IEnumerable;
+            if (fields == null) return false;
+            foreach (var f in fields) if (ReferenceEquals(f, field)) return true;
+            return false;
         }
 
         static int CountEnumerable(object maybeEnum)
