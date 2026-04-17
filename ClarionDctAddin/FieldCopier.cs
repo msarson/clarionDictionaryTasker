@@ -295,7 +295,33 @@ namespace ClarionDctAddin
             var dict = DictModel.GetProp(targetTable, "DataDictionary");
             if (TryInvokeNoArgs(dict, "ChildListTouched", true)) steps.Add("dict.ChildListTouched");
 
-            // 7. Diagnostics — one-time dumps of structures likely involved in persistence.
+            // 7a. Wire Parent — Copy() populates File but leaves parentItem null, which
+            //     orphans the field in the hierarchy and causes save to drop it.
+            if (DictModel.GetProp(newField, "Parent") == null)
+            {
+                if (TrySetProp(newField, "Parent", targetTable)) steps.Add("Parent<-prop");
+                else if (TrySetObjectField(newField, "parentItem", targetTable)) steps.Add("Parent<-field");
+            }
+
+            // 7b. Match Location from an existing target field. A manually-added field is
+            //     Location=Application; copies inherit Location=Dictionary from source.
+            object referenceField = null;
+            if (fieldsAfter != null)
+                foreach (var f in fieldsAfter) { if (!ReferenceEquals(f, newField)) { referenceField = f; break; } }
+            if (referenceField != null)
+            {
+                var refLocation = DictModel.GetProp(referenceField, "Location");
+                if (refLocation != null && TrySetProp(newField, "Location", refLocation))
+                    steps.Add("Location<-" + refLocation);
+            }
+
+            // 8. Flip Touched. Try an explicit set_Touched method too — property setter
+            //    may be hidden from GetProperty() even with NonPublic because the class
+            //    hides the base accessor.
+            if (TrySetBoolProp(newField, "Touched", true)) steps.Add("Touched<-prop");
+            else if (TryInvokeSetter(newField, "set_Touched", true)) steps.Add("Touched<-setter");
+
+            // 9. Diagnostics — one-time dumps of structures likely involved in persistence.
             if (!CollectionInternalsDumped)
             {
                 CollectionInternalsDumped = true;
@@ -307,12 +333,13 @@ namespace ClarionDctAddin
             }
 
             // 8. Per-field state — extra properties that save may consult.
-            steps.Add("File="    + (DictModel.GetProp(newField, "File")     == null ? "null" : "set"));
-            steps.Add("Parent="  + (DictModel.GetProp(newField, "Parent")   == null ? "null" : "set"));
-            steps.Add("Offset="  + (DictModel.AsString(DictModel.GetProp(newField, "Offset")) ?? "?"));
-            steps.Add("Order="   + (DictModel.AsString(DictModel.GetProp(newField, "Order"))  ?? "?"));
+            steps.Add("Loc="      + (DictModel.AsString(DictModel.GetProp(newField, "Location")) ?? "?"));
+            steps.Add("File="     + (DictModel.GetProp(newField, "File")   == null ? "null" : "set"));
+            steps.Add("Parent="   + (DictModel.GetProp(newField, "Parent") == null ? "null" : "set"));
+            steps.Add("Offset="   + (DictModel.AsString(DictModel.GetProp(newField, "Offset")) ?? "?"));
+            steps.Add("Order="    + (DictModel.AsString(DictModel.GetProp(newField, "Order"))  ?? "?"));
             steps.Add("IsInFile=" + (DictModel.AsString(DictModel.GetProp(newField, "IsInFile")) ?? "?"));
-            steps.Add("Touched=" + (DictModel.AsString(DictModel.GetProp(newField, "Touched"))  ?? "?"));
+            steps.Add("Touched="  + (DictModel.AsString(DictModel.GetProp(newField, "Touched"))  ?? "?"));
 
             result.Messages.Add(tag + " : " + string.Join(" > ", steps.ToArray()));
         }
@@ -359,6 +386,50 @@ namespace ClarionDctAddin
             if (!t.IsGenericType) return t.Name;
             var root = t.Name; var i = root.IndexOf('`'); if (i > 0) root = root.Substring(0, i);
             return root + "<" + string.Join(",", t.GetGenericArguments().Select(x => x.Name).ToArray()) + ">";
+        }
+
+        static bool TrySetProp(object target, string name, object value)
+        {
+            if (target == null) return false;
+            var p = target.GetType().GetProperty(name,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (p == null || !p.CanWrite) return false;
+            try { p.SetValue(target, value, null); return true; } catch { return false; }
+        }
+
+        static bool TrySetObjectField(object target, string fieldName, object value)
+        {
+            if (target == null) return false;
+            var t = target.GetType();
+            while (t != null && t != typeof(object))
+            {
+                var f = t.GetField(fieldName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (f != null)
+                {
+                    try { f.SetValue(target, value); return true; } catch { return false; }
+                }
+                t = t.BaseType;
+            }
+            return false;
+        }
+
+        static bool TryInvokeSetter(object target, string setterName, object value)
+        {
+            if (target == null) return false;
+            var t = target.GetType();
+            while (t != null && t != typeof(object))
+            {
+                var m = t.GetMethod(setterName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+                    null, new[] { value == null ? typeof(object) : value.GetType() }, null);
+                if (m != null)
+                {
+                    try { m.Invoke(target, new[] { value }); return true; } catch { return false; }
+                }
+                t = t.BaseType;
+            }
+            return false;
         }
 
 #pragma warning disable CS0219 // keep shim helpers even if temporarily unused
