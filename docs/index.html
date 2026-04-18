@@ -247,8 +247,9 @@
     <li>Copy <code>ClarionDctAddin.dll</code> and <code>ClarionDctAddin.addin</code> into
         <code>C:\clarion12\bin\Addins\Misc\ClarionDctAddin\</code>. The repo ships a
         <code>deploy.bat</code> that does exactly this from the build output.</li>
-    <li>Launch Clarion 12. A new top-level menu <strong>Dict Tools</strong> appears between View
-        and the other menus, and a new toolbar button appears on the Standard toolbar.</li>
+    <li>Launch Clarion 12. A new button with the Dictionary Tasker icon (book + magnifier)
+        appears on the Standard toolbar. Clicking it is the sole entry point — the add-in
+        does not add any main-menu entries.</li>
   </ol>
   <div class="callout warn">
     <strong>Safety reminder:</strong> Batch operations mutate the <em>open dictionary</em>.
@@ -262,10 +263,11 @@
   <span class="kicker">User manual · part 3</span>
   <h2>The launcher window</h2>
   <p>
-    The toolbar button and the <strong>Dict Tools → Dictionary Tasker…</strong> menu entry open
-    the launcher: a tabbed landing window with one tile per feature. Click a tile to open that
-    feature; the launcher hides while you work and returns when you close the child window, so
-    you can chain actions without juggling toolbar clicks.
+    The toolbar button opens the launcher: a tabbed landing window with one tile per feature.
+    Click a tile to open that feature; the launcher hides while you work and returns when you
+    close the child window, so you can chain actions without juggling toolbar clicks. Use the
+    <strong>Help</strong> button in the bottom-left to open this manual in your browser, and
+    <strong>Close</strong> in the bottom-right to dismiss the launcher.
   </p>
   <table>
     <thead><tr><th>Tile</th><th>What it opens</th></tr></thead>
@@ -497,14 +499,29 @@
   <table>
     <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
     <tbody>
-      <tr><td><code>/SharpDevelop/Workbench/MainMenu</code></td><td>Top-level menu bar — adds the <em>Dict Tools</em> menu.</td></tr>
-      <tr><td><code>/SharpDevelop/Workbench/ToolBar/Standard</code></td><td>Adds the launcher toolbar button.</td></tr>
+      <tr><td><code>/SharpDevelop/Workbench/ToolBar/Standard</code></td><td>Adds the launcher toolbar button. Sole UI entry point for the add-in.</td></tr>
       <tr><td><code>/Workspace/Autostart</code></td><td>Runs <code>StartupCommand</code> once at IDE startup (used for the custom toolbar icon patch).</td></tr>
     </tbody>
   </table>
+  <p>
+    An earlier version also registered a <code>/SharpDevelop/Workbench/MainMenu</code> tree with
+    a <em>Dict Tools</em> drop-down. That was removed; the launcher dialog instantiates feature
+    windows directly, so the menu was redundant and cluttered the main menu bar.
+  </p>
 
   <h4>Command classes</h4>
-  <p>All clickable entries subclass <code>ICSharpCode.Core.AbstractMenuCommand</code> and implement <code>Run()</code>.</p>
+  <p>
+    <code>LauncherCommand</code> is the only command actually registered against a UI element
+    now — the toolbar button. It subclasses <code>ICSharpCode.Core.AbstractMenuCommand</code>
+    and implements <code>Run()</code>. Feature-level classes
+    (<code>BrowseTablesCommand</code>, <code>BatchCopyFieldsCommand</code>,
+    <code>BatchCopyKeysCommand</code>) still subclass the same base but are now invoked by the
+    launcher dialog calling them directly in code, not by SharpDevelop dispatching clicks.
+    The debug commands (<code>ListTablesCommand</code>, <code>DiscoverWriteApiCommand</code>,
+    <code>HelloCommand</code>) ship in the DLL but have no UI hookup since the menu was removed
+    — they'd be reachable again by re-registering a path in the manifest or by temporarily
+    calling them from code.
+  </p>
   <pre><code class="lang-csharp"><span class="tok-k">using</span> ICSharpCode.Core;
 
 <span class="tok-k">public class</span> <span class="tok-t">BrowseTablesCommand</span> : <span class="tok-t">AbstractMenuCommand</span>
