@@ -17,40 +17,13 @@
 		       class = "ClarionDctAddin.StartupCommand"/>
 	</Path>
 
-	<Path name = "/SharpDevelop/Workbench/MainMenu">
-		<MenuItem id    = "DictTools"
-		          label = "Dict Tools"
-		          type  = "Menu"
-		          insertafter = "View">
-			<MenuItem id    = "DictToolsLauncher"
-			          label = "Dictionary Tasker..."
-			          icon  = "Icons.16x16.BrowserWindow"
-			          class = "ClarionDctAddin.LauncherCommand"/>
-			<MenuItem id    = "DictToolsSep0" type = "Separator"/>
-			<MenuItem id    = "DictToolsBrowse"
-			          label = "Browse tables..."
-			          icon  = "Icons.16x16.BrowserWindow"
-			          class = "ClarionDctAddin.BrowseTablesCommand"/>
-			<MenuItem id    = "DictToolsBatchCopy"
-			          label = "Batch copy fields..."
-			          icon  = "Icons.16x16.CopyIcon"
-			          class = "ClarionDctAddin.BatchCopyFieldsCommand"/>
-			<MenuItem id    = "DictToolsBatchCopyKeys"
-			          label = "Batch copy keys..."
-			          icon  = "Icons.16x16.CopyIcon"
-			          class = "ClarionDctAddin.BatchCopyKeysCommand"/>
-			<MenuItem id    = "DictToolsSep1" type = "Separator"/>
-			<MenuItem id    = "DictToolsHello"
-			          label = "Hello (addin loaded)"
-			          class = "ClarionDctAddin.HelloCommand"/>
-			<MenuItem id    = "DictToolsReflect"
-			          label = "Reflection dump (debug)..."
-			          class = "ClarionDctAddin.ListTablesCommand"/>
-			<MenuItem id    = "DictToolsWriteApi"
-			          label = "Discover write API (debug)..."
-			          class = "ClarionDctAddin.DiscoverWriteApiCommand"/>
-		</MenuItem>
-	</Path>
+	<!--
+	    Top-level Dict Tools menu removed at user request. The launcher
+	    window (Browse / Batch copy fields / Batch copy keys / Help) is
+	    reached exclusively via the toolbar icon below. The command classes
+	    themselves remain in the DLL since the launcher dialogs instantiate
+	    the feature forms directly; only the manifest menu entries are gone.
+	-->
 
 	<Path name = "/SharpDevelop/Workbench/ToolBar/Standard">
 		<ToolbarItem id = "DictTaskerSeparator" type = "Separator"/>
