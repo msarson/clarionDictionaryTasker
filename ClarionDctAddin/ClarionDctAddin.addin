@@ -50,7 +50,7 @@
 	<Path name = "/SharpDevelop/Workbench/ToolBar/Standard">
 		<ToolbarItem id = "DictTaskerSeparator" type = "Separator"/>
 		<ToolbarItem id      = "DictTaskerLauncher"
-		             icon    = "Icons.24x24.OpenProjectIcon"
+		             icon    = "Icons.24x24.StartPage"
 		             tooltip = "Open Dictionary Tasker"
 		             class   = "ClarionDctAddin.LauncherCommand"/>
 	</Path>
