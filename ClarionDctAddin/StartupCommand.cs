@@ -103,7 +103,11 @@ namespace ClarionDctAddin
 
             // 4. Paint-over fallback: subscribe once per owning ToolStrip and
             //    draw our icon over the item's rectangle on every repaint.
-            //    This wins regardless of what the item tries to paint.
+            //    ICO files have transparent regions — without erasing what
+            //    the control painted first, the stock icon shows through
+            //    those transparent pixels and looks like two icons on top
+            //    of each other. Fill the slot with the toolbar's background
+            //    colour before drawing ours.
             if (owner != null && paintHookedStrips.Add(owner))
             {
                 owner.Paint += delegate(object sender, PaintEventArgs e)
@@ -115,7 +119,13 @@ namespace ClarionDctAddin
                             if (!IsOurButton(ti)) continue;
                             if (!ti.Visible) continue;
                             var r = ti.Bounds;
-                            // Center the 24x24 icon in the item bounds.
+
+                            // Wipe the stock icon (and any hover state so
+                            // the strip repaints cleanly).
+                            using (var bg = new SolidBrush(owner.BackColor))
+                                e.Graphics.FillRectangle(bg, r);
+
+                            // Draw our bitmap at native size, centered.
                             int x = r.X + (r.Width  - img.Width)  / 2;
                             int y = r.Y + (r.Height - img.Height) / 2;
                             e.Graphics.DrawImage(img, x, y, img.Width, img.Height);
