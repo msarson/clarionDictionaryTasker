@@ -117,7 +117,9 @@ namespace ClarionDctAddin
             {
                 Dock = DockStyle.Top,
                 Height = 26,
-                DropDownStyle = ComboBoxStyle.DropDownList,
+                DropDownStyle = ComboBoxStyle.DropDown,
+                AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+                AutoCompleteSource = AutoCompleteSource.ListItems,
                 Font = new Font("Segoe UI", 9.5F)
             };
             cboSource.SelectedIndexChanged += delegate { PopulateSourceFieldsAndTargets(); };
