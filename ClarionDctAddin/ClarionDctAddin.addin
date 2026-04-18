@@ -17,14 +17,22 @@
 		          label = "Dict Tools"
 		          type  = "Menu"
 		          insertafter = "View">
+			<MenuItem id    = "DictToolsLauncher"
+			          label = "Dictionary Tasker..."
+			          icon  = "Icons.16x16.BrowserWindow"
+			          class = "ClarionDctAddin.LauncherCommand"/>
+			<MenuItem id    = "DictToolsSep0" type = "Separator"/>
 			<MenuItem id    = "DictToolsBrowse"
 			          label = "Browse tables..."
+			          icon  = "Icons.16x16.BrowserWindow"
 			          class = "ClarionDctAddin.BrowseTablesCommand"/>
 			<MenuItem id    = "DictToolsBatchCopy"
 			          label = "Batch copy fields..."
+			          icon  = "Icons.16x16.CopyIcon"
 			          class = "ClarionDctAddin.BatchCopyFieldsCommand"/>
 			<MenuItem id    = "DictToolsBatchCopyKeys"
 			          label = "Batch copy keys..."
+			          icon  = "Icons.16x16.CopyIcon"
 			          class = "ClarionDctAddin.BatchCopyKeysCommand"/>
 			<MenuItem id    = "DictToolsSep1" type = "Separator"/>
 			<MenuItem id    = "DictToolsHello"
@@ -37,6 +45,14 @@
 			          label = "Discover write API (debug)..."
 			          class = "ClarionDctAddin.DiscoverWriteApiCommand"/>
 		</MenuItem>
+	</Path>
+
+	<Path name = "/SharpDevelop/Workbench/ToolBar/Standard">
+		<ToolbarItem id      = "DictTaskerSeparator" type = "Separator"/>
+		<ToolbarItem id      = "DictTaskerLauncher"
+		             icon    = "Icons.24x24.BrowserWindow"
+		             tooltip = "Open Dictionary Tasker"
+		             class   = "ClarionDctAddin.LauncherCommand"/>
 	</Path>
 
 </AddIn>
