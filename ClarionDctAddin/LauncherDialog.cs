@@ -15,12 +15,10 @@ namespace ClarionDctAddin
         static readonly Color SubHeader   = Color.FromArgb(200, 213, 228);
 
         readonly object dict;
-        readonly Bitmap backgroundImage;
 
         public LauncherDialog(object dict)
         {
             this.dict = dict;
-            this.backgroundImage = EmbeddedAssets.LoadBackground();
             BuildUi();
             var ico = EmbeddedAssets.LoadIcon();
             if (ico != null)
@@ -28,49 +26,12 @@ namespace ClarionDctAddin
                 Icon = ico;
                 ShowIcon = true;
             }
-            DoubleBuffered = true;
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            var g = e.Graphics;
-            var rect = ClientRectangle;
-
-            // Solid base so unpainted areas never flicker black.
-            using (var b = new SolidBrush(BgColor)) g.FillRectangle(b, rect);
-
-            if (backgroundImage != null)
-            {
-                // Cover the client area — paint the image letterboxed so it
-                // never distorts, centred, and then overlay a translucent
-                // wash so text and tiles stay comfortably readable.
-                float srcRatio = (float)backgroundImage.Width / backgroundImage.Height;
-                float dstRatio = (float)rect.Width / rect.Height;
-                RectangleF dst;
-                if (srcRatio > dstRatio)
-                {
-                    float h = rect.Width / srcRatio;
-                    dst = new RectangleF(0, (rect.Height - h) / 2f, rect.Width, h);
-                }
-                else
-                {
-                    float w = rect.Height * srcRatio;
-                    dst = new RectangleF((rect.Width - w) / 2f, 0, w, rect.Height);
-                }
-                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                g.DrawImage(backgroundImage, dst);
-
-                // Subtle wash so tiles + text stay readable while the image
-                // still comes through as branding. Lower alpha = more image.
-                using (var overlay = new SolidBrush(Color.FromArgb(195, BgColor)))
-                    g.FillRectangle(overlay, rect);
-            }
         }
 
         void BuildUi()
         {
             Text = "Dictionary Tasker";
-            Width = 640;
+            Width = 820;
             Height = 520;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgColor;
@@ -85,7 +46,7 @@ namespace ClarionDctAddin
             {
                 Text = "Dictionary Tasker",
                 Location = new Point(22, 14),
-                Size = new Size(500, 28),
+                Size = new Size(680, 28),
                 Font = new Font("Segoe UI Semibold", 14F),
                 ForeColor = Color.White,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -94,7 +55,7 @@ namespace ClarionDctAddin
             {
                 Text = DictModel.GetDictionaryName(dict) + "     " + DictModel.GetDictionaryFileName(dict),
                 Location = new Point(24, 46),
-                Size = new Size(580, 20),
+                Size = new Size(760, 20),
                 Font = new Font("Segoe UI", 9F),
                 ForeColor = SubHeader,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -102,11 +63,38 @@ namespace ClarionDctAddin
             header.Controls.Add(title);
             header.Controls.Add(sub);
 
+            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = PanelColor, Padding = new Padding(16, 10, 16, 10) };
+            var btnClose = new Button { Text = "Close", Width = 120, Height = 32, Dock = DockStyle.Right, FlatStyle = FlatStyle.System };
+            btnClose.Click += delegate { Close(); };
+            bottom.Controls.Add(btnClose);
+
+            // Left column: big branded image, aspect-preserved, inset slightly.
+            var imagePanel = new Panel
+            {
+                Dock = DockStyle.Left,
+                Width = 300,
+                BackColor = BgColor,
+                Padding = new Padding(18, 18, 8, 18)
+            };
+            var bg = EmbeddedAssets.LoadBackground();
+            if (bg != null)
+            {
+                var pic = new PictureBox
+                {
+                    Dock = DockStyle.Fill,
+                    Image = bg,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    BackColor = BgColor
+                };
+                imagePanel.Controls.Add(pic);
+            }
+
+            // Right column: the three tiles, stacked.
             var body = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(24, 20, 24, 8),
-                BackColor = Color.Transparent,
+                Padding = new Padding(16, 20, 24, 8),
+                BackColor = BgColor,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoScroll = true
@@ -124,14 +112,10 @@ namespace ClarionDctAddin
                 LauncherTileKind.CopyKeys,
                 OpenCopyKeys));
 
-            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = PanelColor, Padding = new Padding(16, 10, 16, 10) };
-            var btnClose = new Button { Text = "Close", Width = 120, Height = 32, Dock = DockStyle.Right, FlatStyle = FlatStyle.System };
-            btnClose.Click += delegate { Close(); };
-            bottom.Controls.Add(btnClose);
-
-            Controls.Add(body);
-            Controls.Add(bottom);
-            Controls.Add(header);
+            Controls.Add(body);        // Fill — must be added before Left so it's hit-tested beneath docks.
+            Controls.Add(imagePanel);  // Left
+            Controls.Add(bottom);      // Bottom
+            Controls.Add(header);      // Top
             CancelButton = btnClose;
         }
 
@@ -142,7 +126,7 @@ namespace ClarionDctAddin
                 TileTitle = title,
                 TileDescription = desc,
                 Kind = icon,
-                Width = 560,
+                Width = 460,
                 Height = 92,
                 Margin = new Padding(0, 0, 0, 14)
             };
