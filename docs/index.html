@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dictionary Tasker — User & Developer Manual</title>
+<style>
+  :root {
+    --navy:       #2D5A87;
+    --navy-dark:  #1F4268;
+    --navy-soft:  #E6EEF6;
+    --ink:        #1E2837;
+    --muted:      #6F7E90;
+    --rule:       #D9DFE6;
+    --bg:         #F5F7FA;
+    --warn-bg:    #FFF7E1;
+    --warn-ink:   #78500A;
+    --code-bg:    #F0F3F7;
+    --code-ink:   #23313F;
+    --accent:     #2B7A78;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+  header.topbar {
+    background: var(--navy);
+    color: #fff;
+    padding: 18px 32px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    position: sticky; top: 0; z-index: 30;
+  }
+  header.topbar h1 { margin: 0; font-size: 20px; letter-spacing: 0.3px; font-weight: 600; }
+  header.topbar .subtitle { font-size: 13px; color: #C8D7E6; margin-top: 2px; }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px;
+    gap: 28px;
+  }
+
+  nav.toc {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 16px 18px 20px;
+    font-size: 13.5px;
+  }
+  nav.toc h3 {
+    margin: 4px 0 10px;
+    font-size: 12px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  nav.toc ul { list-style: none; padding: 0; margin: 0 0 14px; }
+  nav.toc li { margin: 4px 0; }
+  nav.toc a { color: var(--ink); text-decoration: none; display: block; padding: 4px 6px; border-radius: 4px; }
+  nav.toc a:hover { background: var(--navy-soft); color: var(--navy); }
+  nav.toc a.sub { padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+
+  main { min-width: 0; }
+  article {
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 28px 36px 40px;
+    margin-bottom: 24px;
+  }
+  article h2 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    color: var(--navy);
+    font-weight: 600;
+    border-bottom: 2px solid var(--navy-soft);
+    padding-bottom: 10px;
+  }
+  article h2 .kicker {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  article h3 { font-size: 16px; color: var(--navy-dark); margin: 22px 0 8px; }
+  article h4 { font-size: 14px; color: var(--ink); margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.6px; }
+  article p  { line-height: 1.55; margin: 8px 0 12px; }
+  article li { line-height: 1.55; }
+  article strong { color: var(--navy-dark); }
+
+  code, pre {
+    font-family: Consolas, "Source Code Pro", monospace;
+    font-size: 13px;
+  }
+  p code, li code, td code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12.5px;
+  }
+  pre {
+    background: var(--code-ink);
+    color: #E6ECF3;
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    line-height: 1.45;
+    margin: 10px 0 16px;
+  }
+  pre code { color: inherit; background: transparent; padding: 0; }
+  .tok-k   { color: #8ECFE0; }  /* keyword */
+  .tok-s   { color: #D2B36B; }  /* string */
+  .tok-c   { color: #7A8A99; font-style: italic; } /* comment */
+  .tok-t   { color: #B6D77A; }  /* type */
+  .tok-n   { color: #E0A95E; }  /* number */
+
+  .callout {
+    background: var(--navy-soft);
+    border-left: 4px solid var(--navy);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  .callout.warn {
+    background: var(--warn-bg);
+    border-left-color: #C49A26;
+    color: var(--warn-ink);
+  }
+  .callout strong { color: inherit; }
+
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { background: var(--navy-soft); color: var(--navy-dark); font-weight: 600; }
+  tr:hover td { background: #FAFCFE; }
+
+  .pill {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-right: 4px;
+    text-transform: uppercase;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px 0 40px;
+  }
+
+  @media (max-width: 980px) {
+    .shell { grid-template-columns: 1fr; }
+    nav.toc { position: static; max-height: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Dictionary Tasker</h1>
+  <div class="subtitle">User and developer manual — an add-in for the Clarion 12 IDE</div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <h3>User manual</h3>
+    <ul>
+      <li><a href="#about">What it is</a></li>
+      <li><a href="#install">Installing &amp; deploying</a></li>
+      <li><a href="#launcher">The launcher window</a></li>
+      <li><a href="#browse">Browsing a dictionary</a></li>
+      <li><a href="#layouts">Relations layouts</a></li>
+      <li><a href="#copy-fields">Batch copy fields</a></li>
+      <li><a href="#copy-keys">Batch copy keys</a></li>
+      <li><a href="#json">JSON export</a></li>
+    </ul>
+
+    <h3>Developer manual</h3>
+    <ul>
+      <li><a href="#arch">Architecture</a></li>
+      <li><a href="#addin-model">Add-in framework</a></li>
+      <li><a href="#files">File layout</a></li>
+      <li><a href="#mutation">Mutation patterns</a></li>
+      <li><a href="#toolbar-icon">Custom toolbar icon</a></li>
+      <li><a href="#diagram-internals">Diagram internals</a></li>
+      <li><a href="#build">Build &amp; deploy</a></li>
+    </ul>
+
+    <h3>Reflection deep dive</h3>
+    <ul>
+      <li><a href="#ref-what">What reflection is</a></li>
+      <li><a href="#ref-why">Why we use it here</a></li>
+      <li><a href="#ref-patterns">The patterns we use</a></li>
+      <li><a href="#ref-tradeoffs">Trade-offs</a></li>
+    </ul>
+  </nav>
+
+  <main>
+
+<!-- ====================== USER MANUAL ====================== -->
+
+<article id="about">
+  <span class="kicker">User manual · part 1</span>
+  <h2>What Dictionary Tasker is</h2>
+  <p>
+    Dictionary Tasker is a <strong>Clarion 12 IDE add-in</strong> that inspects the dictionary you
+    currently have open in the editor and lets you do three things SoftVelocity's shipped editor
+    does not: <strong>browse the dictionary in structured views</strong>, <strong>batch-copy fields
+    across many tables at once</strong>, and <strong>batch-copy keys across tables</strong> with
+    automatic component re-wiring.
+  </p>
+  <p>
+    It does not parse the <code>.DCT</code> binary on disk. It hooks into the live dictionary
+    model that the editor is already holding in memory, reads from it, and writes back through
+    the same APIs the editor itself uses.
+  </p>
+  <div class="callout">
+    <strong>Typical use case:</strong> you want every table in the dictionary to have
+    <code>guid</code>, <code>TimeStamp</code>, <code>ServerTimeStamp</code>, and
+    <code>DeletedTimeStamp</code> audit fields, plus a matching unique key on <code>guid</code>,
+    without clicking through each table one at a time.
+  </div>
+</article>
+
+<article id="install">
+  <span class="kicker">User manual · part 2</span>
+  <h2>Installing and deploying</h2>
+  <p>The add-in ships as a single DLL plus an <code>.addin</code> manifest. There is no installer.</p>
+  <ol>
+    <li><strong>Close Clarion 12.</strong> The IDE holds a lock on its add-in folder while running.</li>
+    <li>Copy <code>ClarionDctAddin.dll</code> and <code>ClarionDctAddin.addin</code> into
+        <code>C:\clarion12\bin\Addins\Misc\ClarionDctAddin\</code>. The repo ships a
+        <code>deploy.bat</code> that does exactly this from the build output.</li>
+    <li>Launch Clarion 12. A new top-level menu <strong>Dict Tools</strong> appears between View
+        and the other menus, and a new toolbar button appears on the Standard toolbar.</li>
+  </ol>
+  <div class="callout warn">
+    <strong>Safety reminder:</strong> Batch operations mutate the <em>open dictionary</em>.
+    The add-in always writes a timestamped <code>.bak</code> of the <code>.DCT</code> next to
+    the file before any mutation, but you should still test new workflows on a throwaway copy
+    of your dictionary first.
+  </div>
+</article>
+
+<article id="launcher">
+  <span class="kicker">User manual · part 3</span>
+  <h2>The launcher window</h2>
+  <p>
+    The toolbar button and the <strong>Dict Tools → Dictionary Tasker…</strong> menu entry open
+    the launcher: a tabbed landing window with one tile per feature. Click a tile to open that
+    feature; the launcher hides while you work and returns when you close the child window, so
+    you can chain actions without juggling toolbar clicks.
+  </p>
+  <table>
+    <thead><tr><th>Tile</th><th>What it opens</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Browse tables</strong></td><td>Tabbed explorer: flat table list, hierarchical tree, relations diagram.</td></tr>
+      <tr><td><strong>Batch copy fields</strong></td><td>Pick source table + fields + target tables, preview, apply.</td></tr>
+      <tr><td><strong>Batch copy keys</strong></td><td>Same flow, for keys — with automatic component re-mapping by field label.</td></tr>
+    </tbody>
+  </table>
+</article>
+
+<article id="browse">
+  <span class="kicker">User manual · part 4</span>
+  <h2>Browsing a dictionary</h2>
+  <p>The browser dialog has three tabs, each a different view of the same model.</p>
+
+  <h3>Tables tab</h3>
+  <p>
+    A flat <code>ListView</code> of every table with Name, Prefix, Driver, Fields count, Keys count
+    and Description. Double-click a row to open the field browser for that table. The bottom button
+    strip also lets you export the selected table or all tables to JSON.
+  </p>
+  <h4>Field browser</h4>
+  <p>
+    Opened from a Tables row, this modal shows every column on the selected table: Name, Full name
+    (prefixed), Type, Size, Places, Dimensions, Picture, Initial, Heading, Prompt, Description,
+    External name. The <strong>Inspect field</strong> button dumps every public property on the
+    selected <code>DDField</code> — useful when a column displays blank and you want to confirm
+    what Clarion actually holds.
+  </p>
+
+  <h3>Tree tab</h3>
+  <p>
+    A lazy-loaded TreeView: <code>Dictionary → Tables → &lt;TableName&gt; → Fields / Keys / Relations
+    / Triggers → individual items</code>. Each leaf shows the item's readable scalar properties.
+    Expanding a table with hundreds of fields is instant because children are only materialised when
+    the parent is first expanded.
+  </p>
+
+  <h3>Relations tab</h3>
+  <p>
+    An interactive diagram of parent/child relationships between tables. Boxes are tables, arrows go
+    from parent to child. Supports drag-to-move, Ctrl+wheel zoom, Fit-to-view, seventeen different
+    auto-layouts (see the next section), and a <strong>Only Tables with Relations</strong> toggle
+    that hides isolated tables.
+  </p>
+</article>
+
+<article id="layouts">
+  <span class="kicker">User manual · part 5</span>
+  <h2>Relations layouts</h2>
+  <p>Each entry in the <strong>Layout:</strong> dropdown picks a different placement algorithm:</p>
+
+  <table>
+    <thead><tr><th>Layout</th><th>What it does</th><th>Best for</th></tr></thead>
+    <tbody>
+      <tr><td>Layered (by dependency)</td><td>BFS-assigned layers; parents left, children right.</td><td>Small-to-medium graphs.</td></tr>
+      <tr><td>Alphabetical</td><td>Plain grid, A&#8209;Z.</td><td>Finding a table by name.</td></tr>
+      <tr><td>By field count</td><td>Grid, biggest tables first.</td><td>Spotting fact tables.</td></tr>
+      <tr><td>By connections</td><td>Grid, most-connected tables first.</td><td>Finding hubs.</td></tr>
+      <tr><td>By driver</td><td>One column per file driver (MSSQL, TOPSPEED, …).</td><td>Storage audit.</td></tr>
+      <tr><td>Circle</td><td>Ring of boxes.</td><td>Compact overview of small dicts.</td></tr>
+      <tr><td>Force-directed (spring)</td><td>Fruchterman-Reingold physics sim, 160 iterations.</td><td>Revealing natural clusters in large graphs.</td></tr>
+      <tr><td>Hub and spoke</td><td>Most-connected table at centre with two concentric rings.</td><td>Star / snowflake schemas.</td></tr>
+      <tr><td>Clusters (islands)</td><td>One grid tile per connected component.</td><td>Dictionaries with disjoint groups.</td></tr>
+      <tr><td>Tree</td><td>Centered tree from zero-in-degree roots.</td><td>Strict parent-child hierarchies.</td></tr>
+      <tr><td>Radial tree</td><td>Concentric arcs, subtree slices sized by leaf count.</td><td>Wide hierarchies that don't fit vertically.</td></tr>
+      <tr><td>Bipartite</td><td>Three columns: parent-heavy · balanced · child-heavy.</td><td>Seeing lookups vs facts.</td></tr>
+      <tr><td>Matrix view</td><td>Adjacency heatmap; rows &amp; columns are tables alphabetically.</td><td>Dense dictionaries where boxes &amp; lines are unreadable.</td></tr>
+      <tr><td>Sugiyama</td><td>Layered + barycentre crossing reduction (8 iterations).</td><td>Complex hierarchies; cleaner than plain Layered.</td></tr>
+      <tr><td>Orthogonal</td><td>Grid positions with L-shaped edge routing.</td><td>Visio-style diagrams.</td></tr>
+      <tr><td>Arc diagram</td><td>Nodes on a baseline, Bezier arcs above.</td><td>Fewer-than-20 tables; pretty in docs.</td></tr>
+      <tr><td>Chord diagram</td><td>Nodes on a circle, straight chords across.</td><td>Showing connectivity irrespective of hierarchy.</td></tr>
+    </tbody>
+  </table>
+  <p>All layouts respect the <strong>Only Tables with Relations</strong> toggle, so switching it on simplifies the view instantly.</p>
+</article>
+
+<article id="copy-fields">
+  <span class="kicker">User manual · part 6</span>
+  <h2>Batch copy fields</h2>
+  <p>
+    Replicates selected fields from one source table into many target tables at once. Useful for
+    audit columns, timestamps, soft-delete flags, GUID primary keys — anything you want to be
+    present on every table without clicking through each one.
+  </p>
+
+  <h4>Workflow</h4>
+  <ol>
+    <li><strong>Pick the source table.</strong> The dropdown supports incremental search — type
+        anywhere in a table name.</li>
+    <li><strong>Check the fields</strong> you want to copy. Only fields that exist in the source
+        table are listed.</li>
+    <li><strong>Check the target tables.</strong> The source table is hidden from the target list.
+        Use <strong>Select all</strong> / <strong>Clear all</strong> for quick batch selection.</li>
+    <li><strong>Pick a conflict mode:</strong>
+      <ul>
+        <li><em>Skip that field</em> (recommended) — fields that already exist in a target by
+            label are silently skipped.</li>
+        <li><em>Abort on first conflict</em> — the whole batch is cancelled at the preview stage
+            if any conflict exists.</li>
+      </ul>
+    </li>
+    <li>Click <strong>Preview and apply…</strong>. A modal lists every planned add or skip row.
+        Click <strong>Apply changes</strong> to commit.</li>
+    <li>A <strong>progress dialog</strong> shows the current <code>target.field</code> as it
+        processes, with a Cancel button and progress bar.</li>
+    <li>Dictionary is marked dirty. Press <strong>Ctrl+S</strong> in Clarion to persist, close
+        the dictionary tab and reopen it to refresh the editor's view.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Backup:</strong> before any write, the add-in copies your
+    <code>mydict.dct</code> to <code>mydict.dct.tasker-bak-&lt;yyyymmdd-hhmmss&gt;</code> in the
+    same folder. If the copy fails the batch aborts.
+  </div>
+</article>
+
+<article id="copy-keys">
+  <span class="kicker">User manual · part 7</span>
+  <h2>Batch copy keys</h2>
+  <p>
+    Copies keys from a source table to multiple targets. Unlike fields, a key has
+    <strong>components</strong> that reference specific fields in its own table — those
+    references have to be re-wired to the target table's matching fields when the key lands.
+  </p>
+
+  <h4>How re-mapping works</h4>
+  <ol>
+    <li>Each source-key component is identified by the <strong>Label</strong> of the field it
+        points at.</li>
+    <li>When copying to a target, the add-in looks for a field with the same label in the target.
+        If found, the new key's component is re-wired to point at that target field.</li>
+    <li>If any required field is missing from the target, the whole key is skipped (or the whole
+        batch aborted, depending on the conflict mode).</li>
+  </ol>
+
+  <h4>Auto-generated external names</h4>
+  <p>
+    A key's <code>ExternalName</code> normally collides when copied verbatim (two keys with the
+    same external name break the save). The add-in rewrites each copy's ExternalName to
+    <code>&lt;TargetTableName&gt;_&lt;KeyLabel&gt;</code> so every target gets a unique,
+    predictable value. E.g. key <code>guidkey</code> copied into <code>BITACORA</code> gets
+    <code>BITACORA_guidkey</code>.
+  </p>
+
+  <div class="callout warn">
+    <strong>Run field copies first.</strong> If a key references <code>guid</code> and
+    <code>TimeStamp</code>, the targets must already have those fields (same label) before the
+    key copy can land. Batch-copy the fields first, then batch-copy the keys.
+  </div>
+</article>
+
+<article id="json">
+  <span class="kicker">User manual · part 8</span>
+  <h2>JSON export</h2>
+  <p>
+    From the Tables tab you can export one selected table, a multi-selection, or the whole
+    dictionary to a <code>.json</code> file. The schema is hand-picked so the output is stable
+    and machine-parsable:
+  </p>
+<pre><code class="lang-json">{
+  "dictionary": "apiTestdict",
+  "fileName":   "C:\\ai\\clarionstuff\\settings.dct",
+  "generatedAt": "2026-04-17T14:30:00.000Z",
+  "tableCount": 47,
+  "tables": [
+    {
+      "name": "CLIENTES",
+      "prefix": "CLI",
+      "driver": "MSSQL",
+      "fileStatement": "FILE,DRIVER('MSSQL'),NAME('dbo.clientes'),CREATE",
+      "fields": [
+        { "name": "ID", "dataType": "LONG", "size": 4, "picture": "@n-14", "isAutoNumber": true },
+        { "name": "NAME", "dataType": "STRING", "size": 100, "picture": "@s100" }
+      ],
+      "keys": [ /* ... */ ],
+      "relations": [ /* ... */ ]
+    }
+  ]
+}
+</code></pre>
+  <p>
+    The JSON writer is dependency-free (no Newtonsoft), lives in <code>JsonExporter.cs</code>, and
+    uses a hand-picked schema for <code>DDFile</code> and <code>DDField</code> plus reflection-based
+    auto-dumping for <code>DDKey</code>, <code>DDRelation</code>, and <code>DDTrigger</code>.
+  </p>
+</article>
+
+<!-- ====================== DEVELOPER MANUAL ====================== -->
+
+<article id="arch">
+  <span class="kicker">Developer manual · part 1</span>
+  <h2>Architecture at a glance</h2>
+  <p>
+    The add-in is a single <strong>.NET Framework 4.0</strong> DLL that plugs into Clarion 12's
+    IDE, which is itself <strong>SharpDevelop 2.1.x</strong> underneath. Two SharpDevelop
+    assemblies are referenced: <code>ICSharpCode.Core</code> (manifest parser, command base classes)
+    and <code>ICSharpCode.SharpDevelop</code> (workbench access).
+  </p>
+  <p>
+    All Clarion types — <code>DDDataDictionary</code>, <code>DDFile</code>, <code>DDField</code>,
+    <code>DDKey</code>, <code>DDRelation</code>, <code>DataDictionaryViewContent</code>,
+    <code>DCTContent</code> — are accessed strictly through <strong>reflection</strong>. The project
+    has no compile-time reference to any <code>SoftVelocity.*</code>, <code>Clarion.*</code>, or
+    <code>DataDictionary*</code> assembly. See the reflection chapter for why.
+  </p>
+
+  <h3>Data flow</h3>
+<pre><code class="lang-text">WorkbenchSingleton.Workbench.ActiveContent         (SharpDevelop active IViewContent)
+    └─ DataDictionaryViewContent.Control           (SoftVelocity.DataDictionary.Editor)
+        └─ DCTContent.DCT   (public)               (SoftVelocity.DataDictionary)
+            └─ DDDataDictionary                    ← everything we read and mutate
+                 └─ Tables (IEnumerable&lt;DDFile&gt;)
+                      └─ Fields, Keys, Relations, Triggers
+</code></pre>
+</article>
+
+<article id="addin-model">
+  <span class="kicker">Developer manual · part 2</span>
+  <h2>The SharpDevelop add-in framework</h2>
+  <p>
+    Add-ins are <strong>XML manifests</strong> (<code>.addin</code>) + a DLL. The manifest declares
+    <em>codons</em> under extension <em>paths</em>; SharpDevelop walks the paths at startup and
+    constructs the runtime tree of menu items, commands, toolbar entries, pads, and so on.
+  </p>
+
+  <h4>Paths this add-in uses</h4>
+  <table>
+    <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>/SharpDevelop/Workbench/MainMenu</code></td><td>Top-level menu bar — adds the <em>Dict Tools</em> menu.</td></tr>
+      <tr><td><code>/SharpDevelop/Workbench/ToolBar/Standard</code></td><td>Adds the launcher toolbar button.</td></tr>
+      <tr><td><code>/Workspace/Autostart</code></td><td>Runs <code>StartupCommand</code> once at IDE startup (used for the custom toolbar icon patch).</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Command classes</h4>
+  <p>All clickable entries subclass <code>ICSharpCode.Core.AbstractMenuCommand</code> and implement <code>Run()</code>.</p>
+  <pre><code class="lang-csharp"><span class="tok-k">using</span> ICSharpCode.Core;
+
+<span class="tok-k">public class</span> <span class="tok-t">BrowseTablesCommand</span> : <span class="tok-t">AbstractMenuCommand</span>
+{
+    <span class="tok-k">public override void</span> Run()
+    {
+        <span class="tok-k">object</span> dict; <span class="tok-k">string</span> err;
+        <span class="tok-k">if</span> (!DictModel.TryGetOpenDictionary(<span class="tok-k">out</span> dict, <span class="tok-k">out</span> err)) <span class="tok-k">return</span>;
+        <span class="tok-k">using</span> (<span class="tok-k">var</span> dlg = <span class="tok-k">new</span> <span class="tok-t">TableListDialog</span>(dict))
+            dlg.ShowDialog();
+    }
+}</code></pre>
+
+  <div class="callout warn">
+    <strong>A missing icon name kills the toolbar.</strong> If you reference
+    <code>icon="Icons.24x24.SomethingNotReal"</code> on a <code>ToolbarItem</code>, SharpDevelop's
+    toolbar doozer bails at startup and the entire Standard toolbar disappears. Always reference
+    an icon confirmed to exist in <code>C:\clarion12\bin\Addins\Clarion.addin</code> — or, for
+    custom icons, use the post-startup renderer swap pattern described in the
+    <a href="#toolbar-icon">custom toolbar icon</a> chapter.
+  </div>
+</article>
+
+<article id="files">
+  <span class="kicker">Developer manual · part 3</span>
+  <h2>File layout</h2>
+  <table>
+    <thead><tr><th>File</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><code>ClarionDctAddin.addin</code></td><td>Manifest. Declares the menu tree, toolbar item, autostart class, and assembly import.</td></tr>
+      <tr><td><code>DictModel.cs</code></td><td>Core reflection helpers for finding the dictionary model on the active view content.</td></tr>
+      <tr><td><code>LauncherCommand.cs</code> / <code>LauncherDialog.cs</code></td><td>Entry point. Tile-based launcher with custom-drawn icons.</td></tr>
+      <tr><td><code>BrowseTablesCommand.cs</code> / <code>TableListDialog.cs</code></td><td>Tabbed browser (Tables / Tree / Relations).</td></tr>
+      <tr><td><code>FieldListDialog.cs</code></td><td>Per-table field grid + Inspect field dump.</td></tr>
+      <tr><td><code>DictTreeViewPanel.cs</code></td><td>Lazy-loading hierarchical TreeView.</td></tr>
+      <tr><td><code>RelationsDiagramPanel.cs</code></td><td>Custom-painted relations diagram with 17 layouts, drag, zoom, filter.</td></tr>
+      <tr><td><code>BatchCopyFieldsCommand.cs</code> / <code>BatchCopyDialog.cs</code> / <code>FieldCopier.cs</code></td><td>Batch copy fields.</td></tr>
+      <tr><td><code>BatchCopyKeysCommand.cs</code> / <code>BatchCopyKeysDialog.cs</code> / <code>KeyCopier.cs</code></td><td>Batch copy keys with component re-mapping.</td></tr>
+      <tr><td><code>BatchProgressDialog.cs</code></td><td>Modal progress dialog with per-item label and Cancel.</td></tr>
+      <tr><td><code>JsonExporter.cs</code></td><td>Dependency-free JSON writer with hand-picked schema.</td></tr>
+      <tr><td><code>EmbeddedAssets.cs</code></td><td>Loads embedded <code>.ico</code> and <code>.png</code> resources.</td></tr>
+      <tr><td><code>StartupCommand.cs</code></td><td>Runs at <code>/Workspace/Autostart</code>. Swaps the toolbar renderer to paint the custom icon.</td></tr>
+      <tr><td><code>ListTablesCommand.cs</code> / <code>DiscoverWriteApiCommand.cs</code> / <code>HelloCommand.cs</code></td><td>Diagnostic / debug entries used during bring-up.</td></tr>
+    </tbody>
+  </table>
+</article>
+
+<article id="mutation">
+  <span class="kicker">Developer manual · part 4</span>
+  <h2>Mutation patterns (writing to the live dictionary)</h2>
+  <p>
+    Simply adding a <code>DDField</code> to <code>DDFile.Fields</code> does not make it stick. The
+    Clarion editor keeps a <strong>native TPS record store</strong> (<code>Win32Dictionary</code>)
+    alongside the managed model, and the save pipeline iterates that native store. Field/key state
+    has to be configured <strong>before registration</strong> for the internal canonical methods
+    to actually persist the record.
+  </p>
+
+  <h3>Field copy recipe (from <code>FieldCopier.CopyAndAdd</code>)</h3>
+  <ol>
+    <li><code>sourceField.Copy(parent, quiet=false)</code> — clone with a new Guid, parent wired.</li>
+    <li>Reflection-set backing fields on the copy <strong>before</strong> registration:
+        <code>parentItem</code>, <code>storageLocation=Application</code>, <code>stored=true</code>,
+        <code>itemHasChanged=true</code>, <code>recordOrder</code>.</li>
+    <li>Try the internal <code>DDFile.InsertField(DDField)</code> — this is the lifecycle path
+        that allocates a <code>_C6Ident</code> and creates the native record.</li>
+    <li>If not yet registered, try <code>DDField.Insert(position)</code> on the instance itself.</li>
+    <li>As a last resort, call the collection's own <code>Add(DDField)</code> on the managed list.</li>
+  </ol>
+
+  <h3>Key copy recipe (from <code>KeyCopier.CopyAndAdd</code>)</h3>
+  <p>Similar shape but with two critical differences:</p>
+  <ul>
+    <li><strong>Call <code>GenerateNewId()</code> right after Copy.</strong> Without it, the new
+        key's GUID collides with its source.</li>
+    <li><strong>Do not set <code>stored=true</code>.</strong> For keys, that flag routes save
+        through <code>DoUpdate</code>, which looks up an existing on-disk record by GUID and
+        throws "Record X not found." Leaving it false (the value Copy produces) routes save
+        through <code>DoInsert</code> instead.</li>
+    <li>Assign a fresh <code>Order</code> = current <code>Keys</code> count, otherwise the native
+        <code>KEYS-BYORDER</code> index throws "Creates Duplicate Key".</li>
+    <li>Re-wire <code>KeyComponents</code>: for each source component, find the target field with
+        the same <code>Label</code> and point the new component's <code>Field</code> / <code>FieldId</code>
+        there.</li>
+  </ul>
+
+  <h3>Marking dirty for save</h3>
+  <p>The editor's Save button is driven by SharpDevelop's <code>ICanBeDirty.IsDirty</code> on the
+     <code>DataDictionaryViewContent</code>, not on the model. After a successful batch, we set:</p>
+  <pre><code class="lang-csharp"><span class="tok-c">// Model side</span>
+TrySetProp(dict, <span class="tok-s">"IsDirty"</span>, <span class="tok-k">true</span>);
+TryInvokeNoArgs(dict, <span class="tok-s">"DoIsDirtyChanged"</span>, nonPublic: <span class="tok-k">true</span>);
+TryInvokeNoArgs(dict, <span class="tok-s">"ChildListTouched"</span>, nonPublic: <span class="tok-k">true</span>);
+
+<span class="tok-c">// Editor side — this is what actually enables the Save menu</span>
+TrySetProp(viewContent, <span class="tok-s">"IsDirty"</span>, <span class="tok-k">true</span>);
+TryInvokeNoArgs(viewContent, <span class="tok-s">"OnIsDirtyChanged"</span>, nonPublic: <span class="tok-k">true</span>);
+</code></pre>
+</article>
+
+<article id="toolbar-icon">
+  <span class="kicker">Developer manual · part 5</span>
+  <h2>Custom toolbar icon</h2>
+  <p>
+    This was surprisingly hard. SharpDevelop resolves the <code>icon="…"</code> attribute on
+    <code>&lt;ToolbarItem&gt;</code> <em>at toolbar-construction time</em>, which runs before any
+    <code>/Workspace/Autostart</code> class. Registering a custom bitmap in
+    <code>ResourceService</code> from autostart is too late — the button already has its Image.
+  </p>
+  <p>Clarion's toolbar items are a custom class <code>ToolBarCommand</code> (a <code>ToolStripItem</code> subclass)
+     that paints its icon from its <code>Codon</code>. Setting <code>item.Image</code> does nothing;
+     reflection-setting every <code>Image</code>-typed field on the item is also a no-op because
+     the paint path doesn't read those fields — it reads from the codon. Even hooking
+     <code>ToolStrip.Paint</code> to paint-over only fires for full-strip repaints, so hover
+     state restores the stock icon.</p>
+
+  <h4>The working fix: replace the ToolStrip renderer</h4>
+  <p>Subclass <code>ToolStripProfessionalRenderer</code>, override <code>OnRenderItemImage</code>
+     to draw our bitmap for our button and skip <code>base</code>, and swap the instance onto the
+     owning <code>ToolStrip</code>:</p>
+  <pre><code class="lang-csharp"><span class="tok-k">internal class</span> <span class="tok-t">DictTaskerToolbarRenderer</span> : <span class="tok-t">ToolStripProfessionalRenderer</span>
+{
+    <span class="tok-k">readonly</span> <span class="tok-t">Image</span> icon;
+    <span class="tok-k">public</span> DictTaskerToolbarRenderer(<span class="tok-t">Image</span> icon) { <span class="tok-k">this</span>.icon = icon; }
+
+    <span class="tok-k">protected override void</span> OnRenderItemImage(<span class="tok-t">ToolStripItemImageRenderEventArgs</span> e)
+    {
+        <span class="tok-k">if</span> (icon != <span class="tok-k">null</span> &amp;&amp; StartupCommand.IsOurToolbarItem(e.Item))
+        {
+            <span class="tok-k">var</span> r = e.ImageRectangle;
+            <span class="tok-k">if</span> (r.Width &gt; 0 &amp;&amp; r.Height &gt; 0)
+                e.Graphics.DrawImage(icon, r);
+            <span class="tok-k">return</span>; <span class="tok-c">// skip base — stock icon is never drawn</span>
+        }
+        <span class="tok-k">base</span>.OnRenderItemImage(e);
+    }
+}</code></pre>
+  <p>
+    The manifest keeps referencing a known-good icon like <code>Icons.24x24.StartPage</code> so
+    the toolbar always builds. <code>StartupCommand</code> polls on a <code>Timer</code> until
+    our button is found, then swaps the renderer once per owning <code>ToolStrip</code>. Every
+    other item keeps default styling because the subclass delegates to <code>base</code> for
+    non-matching items.
+  </p>
+</article>
+
+<article id="diagram-internals">
+  <span class="kicker">Developer manual · part 6</span>
+  <h2>Relations diagram internals</h2>
+  <p>The diagram is one <code>Panel</code> (<code>RelationsDiagramPanel</code>) with custom
+     <code>OnPaint</code>. Everything is drawn via <code>System.Drawing</code> — no external
+     graphics library.</p>
+
+  <h4>State</h4>
+  <ul>
+    <li><code>nodes</code> — one <code>TableNode</code> per table (box position + hover state).</li>
+    <li><code>edges</code> — one <code>RelEdge</code> per relation (source node, target node, label).</li>
+    <li><code>zoom</code> — applied via <code>Graphics.ScaleTransform</code> during paint.</li>
+    <li><code>currentEdgeStyle</code> — Default / Orthogonal / Arc / Chord. Each layout opts into its style.</li>
+    <li><code>matrixMode</code> — when <code>true</code>, <code>OnCanvasPaint</code> takes the
+        <code>DrawMatrix</code> code path instead of painting boxes and edges.</li>
+  </ul>
+
+  <h4>Layout dispatch</h4>
+  <p><code>DoLayout(LayoutMode)</code> resets state, filters visible nodes, and calls the
+     mode-specific <code>Layout*</code> method. Each layout sets <code>node.Bounds</code> for every
+     visible node (except Matrix, which uses <code>matrixNodes</code> and its own drawing).</p>
+
+  <h4>Hit testing</h4>
+  <p><code>OnCanvasMouseDown</code> converts screen coordinates to logical coordinates via
+     <code>ScreenToLogical</code> (divide by zoom), then walks <code>nodes</code> back-to-front
+     and picks the first visible node whose <code>Bounds.Contains</code> the point. The hit node
+     is moved to the end of <code>nodes</code> so it paints on top during drag.</p>
+</article>
+
+<article id="build">
+  <span class="kicker">Developer manual · part 7</span>
+  <h2>Build &amp; deploy</h2>
+  <p>Requires Visual Studio with the .NET Framework 4.0 targeting pack. From the repo root:</p>
+  <pre><code class="lang-text">dotnet build -c Debug</code></pre>
+  <p>Close Clarion 12, then:</p>
+  <pre><code class="lang-text">deploy.bat</code></pre>
+  <p>which copies <code>ClarionDctAddin.dll</code> + <code>ClarionDctAddin.addin</code> to
+     <code>C:\clarion12\bin\Addins\Misc\ClarionDctAddin\</code>. Relaunch Clarion.</p>
+</article>
+
+<!-- ====================== REFLECTION DEEP DIVE ====================== -->
+
+<article id="ref-what">
+  <span class="kicker">Reflection deep dive · chapter 1</span>
+  <h2>What reflection is</h2>
+  <p>
+    Reflection is .NET's facility to inspect and use types <strong>by name at runtime</strong>
+    instead of referencing them at compile time. Every object carries a <code>Type</code> handle
+    via <code>GetType()</code>; from that handle you can enumerate members, look one up by
+    string, read values, write values, and invoke methods — all without the compiler ever
+    having seen the type.
+  </p>
+
+  <h4>The normal (compile-time) way</h4>
+  <pre><code class="lang-csharp"><span class="tok-k">using</span> SoftVelocity.DataDictionary;
+
+<span class="tok-k">var</span> dict   = (<span class="tok-t">DDDataDictionary</span>)someObj;
+<span class="tok-k">var</span> tables = dict.Tables;
+<span class="tok-k">foreach</span> (<span class="tok-k">var</span> t <span class="tok-k">in</span> tables)
+    Console.WriteLine(t.Label);</code></pre>
+  <p>Requires <code>DataDictionary.dll</code> as a project reference. The compiler verifies
+     that <code>Tables</code> and <code>Label</code> exist with those exact names and types.</p>
+
+  <h4>The reflection way</h4>
+  <pre><code class="lang-csharp"><span class="tok-k">var</span> tables = someObj.GetType().GetProperty(<span class="tok-s">"Tables"</span>).GetValue(someObj, <span class="tok-k">null</span>);
+<span class="tok-k">foreach</span> (<span class="tok-k">var</span> t <span class="tok-k">in</span> (<span class="tok-t">IEnumerable</span>)tables)
+    Console.WriteLine(t.GetType().GetProperty(<span class="tok-s">"Label"</span>).GetValue(t, <span class="tok-k">null</span>));</code></pre>
+  <p>The compiler knows nothing about SoftVelocity types. <code>"Tables"</code> and <code>"Label"</code>
+     are string keys resolved by the runtime when the code executes.</p>
+</article>
+
+<article id="ref-why">
+  <span class="kicker">Reflection deep dive · chapter 2</span>
+  <h2>Why we use reflection here</h2>
+  <ol>
+    <li>
+      <strong>No hard SoftVelocity DLL reference.</strong> The add-in project only references
+      <code>ICSharpCode.Core</code> and <code>ICSharpCode.SharpDevelop</code> — the add-in
+      framework itself. It never references <code>DataDictionary.dll</code>,
+      <code>DataDictionaryEditor.dll</code>, or any <code>Clarion.*</code> assembly. That means
+      the add-in builds identically on any machine with a .NET Framework 4.0 targeting pack, even
+      without Clarion installed.
+    </li>
+    <li>
+      <strong>Portability across Clarion point-releases.</strong> If SoftVelocity ships
+      12.0.14005 with rev'd assembly versions or renamed internal classes, a compile-time-bound
+      add-in would either fail to load (strong-name mismatch) or crash the first time it touched
+      a vanished type. Reflection-based lookup by string name degrades gracefully — a missing
+      member just returns null.
+    </li>
+    <li>
+      <strong>Access to non-public members.</strong> Several members we must set to make
+      persistence work — <code>parentItem</code>, <code>stored</code>,
+      <code>itemHasChanged</code>, <code>addedItems</code>, <code>InsertField</code>,
+      <code>InsertKey</code>, <code>GenerateNewId</code> — are <code>internal</code>,
+      <code>private</code>, or <code>protected</code>. A compile-time reference can't call them.
+      <code>BindingFlags.NonPublic | BindingFlags.Instance</code> bypasses visibility.
+    </li>
+    <li>
+      <strong>Defensive probing.</strong> When we didn't know whether key components lived on
+      <code>Components</code>, <code>KeyComponents</code>, <code>Fields</code>,
+      <code>Segments</code>, or something else, the code tried each candidate name in turn and
+      used whichever returned a collection. Compile-time code can't do that.
+    </li>
+    <li>
+      <strong>Patching third-party controls.</strong> The toolbar-icon fix walks every
+      <code>ToolStrip</code> on every open <code>Form</code>, finds our button by its tooltip
+      text, and replaces the owning toolbar's <code>Renderer</code>. We never had that control
+      under our ownership; reflection and WinForms control-tree walking let us reach in and
+      take over one specific render path.
+    </li>
+  </ol>
+</article>
+
+<article id="ref-patterns">
+  <span class="kicker">Reflection deep dive · chapter 3</span>
+  <h2>The patterns we use</h2>
+
+  <h3>Look up a public property, returning null on failure</h3>
+  <p>From <code>DictModel.cs</code>. Used hundreds of times; the foundation of everything else.</p>
+  <pre><code class="lang-csharp"><span class="tok-k">public static</span> <span class="tok-k">object</span> GetProp(<span class="tok-k">object</span> o, <span class="tok-k">string</span> name)
+{
+    <span class="tok-k">if</span> (o == <span class="tok-k">null</span>) <span class="tok-k">return</span> <span class="tok-k">null</span>;
+    <span class="tok-k">var</span> p = o.GetType().GetProperty(name, <span class="tok-t">BindingFlags</span>.Public | <span class="tok-t">BindingFlags</span>.Instance);
+    <span class="tok-k">if</span> (p == <span class="tok-k">null</span> || !p.CanRead || p.GetIndexParameters().Length &gt; 0) <span class="tok-k">return</span> <span class="tok-k">null</span>;
+    <span class="tok-k">try</span> { <span class="tok-k">return</span> p.GetValue(o, <span class="tok-k">null</span>); } <span class="tok-k">catch</span> { <span class="tok-k">return</span> <span class="tok-k">null</span>; }
+}</code></pre>
+
+  <h3>Invoke an internal method with a typed parameter</h3>
+  <p>From <code>FieldCopier.cs</code>. This is the payload of the fields batch copy.</p>
+  <pre><code class="lang-csharp"><span class="tok-k">var</span> insertField = targetTable.GetType().GetMethod(
+    <span class="tok-s">"InsertField"</span>,
+    <span class="tok-t">BindingFlags</span>.NonPublic | <span class="tok-t">BindingFlags</span>.Instance,
+    <span class="tok-k">null</span>,
+    <span class="tok-k">new</span>[] { newField.GetType() },
+    <span class="tok-k">null</span>);
+
+<span class="tok-k">if</span> (insertField != <span class="tok-k">null</span>)
+{
+    <span class="tok-k">try</span> { insertField.Invoke(targetTable, <span class="tok-k">new</span> <span class="tok-k">object</span>[] { newField }); }
+    <span class="tok-k">catch</span> (<span class="tok-t">TargetInvocationException</span> tie) { <span class="tok-k">throw</span> tie.InnerException ?? tie; }
+}</code></pre>
+  <p>
+    Note the <code>GetMethod</code> overload that takes a <code>Type[]</code>. It's the only way
+    to disambiguate overloaded methods precisely. <code>TargetInvocationException</code> wraps
+    the real exception from the invoked method; we unwrap with <code>InnerException</code> so
+    the caller sees the actual failure.
+  </p>
+
+  <h3>Walk base types to set an inherited non-public field</h3>
+  <p>
+    <code>Type.GetField</code> with <code>BindingFlags.NonPublic</code> does <strong>not</strong>
+    return inherited non-public fields. You have to walk the class hierarchy yourself:
+  </p>
+  <pre><code class="lang-csharp"><span class="tok-k">static bool</span> TrySetObjectField(<span class="tok-k">object</span> target, <span class="tok-k">string</span> name, <span class="tok-k">object</span> value)
+{
+    <span class="tok-k">if</span> (target == <span class="tok-k">null</span>) <span class="tok-k">return</span> <span class="tok-k">false</span>;
+    <span class="tok-k">var</span> t = target.GetType();
+    <span class="tok-k">while</span> (t != <span class="tok-k">null</span> &amp;&amp; t != <span class="tok-k">typeof</span>(<span class="tok-k">object</span>))
+    {
+        <span class="tok-k">var</span> f = t.GetField(name,
+            <span class="tok-t">BindingFlags</span>.Public | <span class="tok-t">BindingFlags</span>.NonPublic
+          | <span class="tok-t">BindingFlags</span>.Instance | <span class="tok-t">BindingFlags</span>.DeclaredOnly);
+        <span class="tok-k">if</span> (f != <span class="tok-k">null</span>)
+        {
+            <span class="tok-k">try</span> { f.SetValue(target, value); <span class="tok-k">return</span> <span class="tok-k">true</span>; }
+            <span class="tok-k">catch</span> { <span class="tok-k">return</span> <span class="tok-k">false</span>; }
+        }
+        t = t.BaseType;
+    }
+    <span class="tok-k">return</span> <span class="tok-k">false</span>;
+}</code></pre>
+  <p>
+    <code>BindingFlags.DeclaredOnly</code> restricts each call to fields declared directly on
+    the current type, and the loop takes care of the inheritance chain. This is how we get
+    access to <code>parentItem</code> on <code>DataDictionaryItem</code> through a
+    <code>DDField</code> instance.
+  </p>
+
+  <h3>Defensive name probing</h3>
+  <p>
+    We rarely know the canonical name of an internal field. Instead, we try a list and use whichever resolves.
+    From <code>KeyCopier.FindComponents</code>:
+  </p>
+  <pre><code class="lang-csharp"><span class="tok-k">static</span> <span class="tok-t">IEnumerable</span> FindComponents(<span class="tok-k">object</span> key)
+{
+    <span class="tok-k">string</span>[] names = { <span class="tok-s">"Components"</span>, <span class="tok-s">"KeyComponents"</span>, <span class="tok-s">"Fields"</span>, <span class="tok-s">"KeyFields"</span>,
+                         <span class="tok-s">"Segments"</span>, <span class="tok-s">"Parts"</span>, <span class="tok-s">"Children"</span>, <span class="tok-s">"Items"</span>, <span class="tok-s">"FieldList"</span> };
+    <span class="tok-k">foreach</span> (<span class="tok-k">var</span> n <span class="tok-k">in</span> names)
+    {
+        <span class="tok-k">var</span> v = DictModel.GetProp(key, n) <span class="tok-k">as</span> <span class="tok-t">IEnumerable</span>;
+        <span class="tok-k">if</span> (v != <span class="tok-k">null</span> &amp;&amp; !(v <span class="tok-k">is</span> <span class="tok-k">string</span>)) <span class="tok-k">return</span> v;
+    }
+    <span class="tok-c">// Last-resort fallback: scan every public IEnumerable property for one</span>
+    <span class="tok-c">// whose items carry a Field reference.</span>
+    <span class="tok-c">// ...</span>
+    <span class="tok-k">return</span> <span class="tok-k">null</span>;
+}</code></pre>
+</article>
+
+<article id="ref-tradeoffs">
+  <span class="kicker">Reflection deep dive · chapter 4</span>
+  <h2>Trade-offs</h2>
+  <table>
+    <thead><tr><th>Trade-off</th><th>What it costs us</th><th>How we mitigate it</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>No compile-time checking</td>
+        <td>Typo <code>"Tabels"</code> → runtime <code>null</code>, not a build error.</td>
+        <td>Defensive null-checking. Log lookups to <code>%TEMP%</code> so discovery of missing
+            members is fast. Unit-style smoke tests during bring-up (the <code>Reflection dump</code>
+            and <code>Discover write API</code> debug menu entries).</td>
+      </tr>
+      <tr>
+        <td>No IntelliSense</td>
+        <td>Can't autocomplete SoftVelocity member names in the IDE.</td>
+        <td>Inline tree-view browser lets the dev list every scalar property on a live instance.
+            It's slower than IntelliSense but works on any build of Clarion.</td>
+      </tr>
+      <tr>
+        <td>Slower than direct calls</td>
+        <td>Reflection invocation is 10–100× slower than a static method call.</td>
+        <td>Negligible at our call volumes (hundreds of invocations per batch, not millions). No
+            optimisation needed.</td>
+      </tr>
+      <tr>
+        <td>Brittle to renames</td>
+        <td>A future SoftVelocity release renaming <code>parentItem</code> silently breaks copy.</td>
+        <td>Defensive candidate-name probing. Fallback chains (try internal method, else public
+            method, else collection Add). Every batch run logs which path succeeded so regressions
+            surface quickly.</td>
+      </tr>
+      <tr>
+        <td>Visibility rules bypassed</td>
+        <td>We're deliberately reaching into API surfaces SoftVelocity did not mean to expose.</td>
+        <td>Backup-before-write is enforced for every batch. Every mutation goes through Clarion's
+            own lifecycle methods (<code>Copy</code>, <code>InsertField</code>) where possible,
+            not by hand-crafting records in the native TPS store.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    The net effect: we trade compile-time safety for <strong>portability + access to non-public
+    members</strong>, which was essential because the entire value proposition of this add-in is
+    <em>write back to a live dictionary that was never designed for third-party mutation</em>.
+  </p>
+</article>
+
+<footer>
+  Dictionary Tasker · user and developer manual · generated from the source tree.
+</footer>
+
+  </main>
+</div>
+
+</body>
+</html>
