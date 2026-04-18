@@ -669,6 +669,72 @@ TryInvokeNoArgs(viewContent, <span class="tok-s">"OnIsDirtyChanged"</span>, nonP
     other item keeps default styling because the subclass delegates to <code>base</code> for
     non-matching items.
   </p>
+
+  <h3>Disabled-state rendering</h3>
+  <p>
+    The custom renderer inspects <code>e.Item.Enabled</code> inside <code>OnRenderItemImage</code>.
+    When the item is disabled (see the conditional-enable section below), the renderer applies an
+    <code>ImageAttributes</code> with a luminance-weighted <code>ColorMatrix</code>
+    (<code>0.30R + 0.59G + 0.11B</code>) and alpha dropped to 0.45 — producing a desaturated,
+    semi-transparent version of the icon at paint time. No separate greyed asset ships in the DLL.
+  </p>
+</article>
+
+<article id="condition-enable">
+  <span class="kicker">Developer manual · part 5b</span>
+  <h2>Conditional enable — "dictionary open"</h2>
+  <p>
+    The toolbar button is disabled while no <code>.DCT</code> is loaded in the IDE. SharpDevelop
+    supports this declaratively via <code>IConditionEvaluator</code>: register a named condition
+    and wrap the <code>ToolbarItem</code> in a <code>&lt;Condition&gt;</code> element. The
+    framework re-evaluates the condition on workbench state changes (view opened, closed,
+    switched) and sets the item's <code>Enabled</code> automatically.
+  </p>
+
+  <h4>The evaluator class</h4>
+  <pre><code class="lang-csharp"><span class="tok-k">public class</span> <span class="tok-t">DictionaryOpenCondition</span> : <span class="tok-t">IConditionEvaluator</span>
+{
+    <span class="tok-k">const string</span> DictViewFullName =
+        <span class="tok-s">"SoftVelocity.DataDictionary.Editor.DataDictionaryViewContent"</span>;
+
+    <span class="tok-k">public bool</span> IsValid(<span class="tok-k">object</span> caller, <span class="tok-t">Condition</span> condition)
+    {
+        <span class="tok-k">var</span> wb = WorkbenchSingleton.Workbench;
+        <span class="tok-k">if</span> (wb == <span class="tok-k">null</span>) <span class="tok-k">return</span> <span class="tok-k">false</span>;
+        <span class="tok-k">foreach</span> (<span class="tok-k">var</span> vc <span class="tok-k">in</span> (<span class="tok-t">IEnumerable</span>)wb.ViewContentCollection)
+            <span class="tok-k">if</span> (vc != <span class="tok-k">null</span> &amp;&amp; vc.GetType().FullName == DictViewFullName)
+                <span class="tok-k">return</span> <span class="tok-k">true</span>;
+        <span class="tok-k">return</span> <span class="tok-k">false</span>;
+    }
+}</code></pre>
+
+  <h4>Manifest wiring</h4>
+  <p>
+    The evaluator is registered against the assembly import, and the <code>ToolbarItem</code>
+    is wrapped in a <code>&lt;Condition name="DictionaryOpen" action="Disable"&gt;</code>.
+  </p>
+  <pre><code class="lang-xml">&lt;Runtime&gt;
+    &lt;Import assembly="ClarionDctAddin.dll"&gt;
+        &lt;ConditionEvaluator name="DictionaryOpen"
+                             class="ClarionDctAddin.DictionaryOpenCondition"/&gt;
+    &lt;/Import&gt;
+&lt;/Runtime&gt;
+
+&lt;Path name="/SharpDevelop/Workbench/ToolBar/Standard"&gt;
+    &lt;ToolbarItem id="DictTaskerSeparator" type="Separator"/&gt;
+    &lt;Condition name="DictionaryOpen" action="Disable"&gt;
+        &lt;ToolbarItem id="DictTaskerLauncher"
+                     icon="Icons.24x24.StartPage"
+                     tooltip="Open Dictionary Tasker"
+                     class="ClarionDctAddin.LauncherCommand"/&gt;
+    &lt;/Condition&gt;
+&lt;/Path&gt;</code></pre>
+
+  <p>
+    <code>action="Disable"</code> greys the button out when the condition is false.
+    Alternative actions like <code>Exclude</code> would hide the item entirely. The custom
+    renderer then draws the greyed icon automatically as described above.
+  </p>
 </article>
 
 <article id="diagram-internals">
