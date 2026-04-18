@@ -198,6 +198,7 @@
       <li><a href="#files">File layout</a></li>
       <li><a href="#mutation">Mutation patterns</a></li>
       <li><a href="#toolbar-icon">Custom toolbar icon</a></li>
+      <li><a href="#condition-enable">Conditional enable</a></li>
       <li><a href="#diagram-internals">Diagram internals</a></li>
       <li><a href="#build">Build &amp; deploy</a></li>
     </ul>
@@ -249,7 +250,9 @@
         <code>deploy.bat</code> that does exactly this from the build output.</li>
     <li>Launch Clarion 12. A new button with the Dictionary Tasker icon (book + magnifier)
         appears on the Standard toolbar. Clicking it is the sole entry point — the add-in
-        does not add any main-menu entries.</li>
+        does not add any main-menu entries. The button is <strong>disabled</strong> (rendered
+        greyed-out) whenever no dictionary is open; it lights up the moment a <code>.DCT</code>
+        tab is active.</li>
   </ol>
   <div class="callout warn">
     <strong>Safety reminder:</strong> Batch operations mutate the <em>open dictionary</em>.
