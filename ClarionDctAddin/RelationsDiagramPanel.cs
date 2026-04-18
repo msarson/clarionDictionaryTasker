@@ -32,7 +32,7 @@ namespace ClarionDctAddin
         const float MinZoom = 0.25f;
         const float MaxZoom = 3.0f;
 
-        enum LayoutMode { Layered, Alphabetical, ByFieldCount, ByConnections, ByDriver, Circle }
+        enum LayoutMode { Layered, Alphabetical, ByFieldCount, ByConnections, ByDriver, Circle, ForceDirected, HubSpoke, Clusters, Tree }
 
         readonly object dict;
         readonly List<TableNode> nodes = new List<TableNode>();
@@ -81,7 +81,11 @@ namespace ClarionDctAddin
                 "By field count",
                 "By connections",
                 "By driver",
-                "Circle"
+                "Circle",
+                "Force-directed (spring)",
+                "Hub and spoke",
+                "Clusters (islands)",
+                "Tree"
             });
             cboLayout.SelectedIndex = 0;
             cboLayout.SelectedIndexChanged += delegate { DoLayout((LayoutMode)cboLayout.SelectedIndex); };
@@ -262,9 +266,313 @@ namespace ClarionDctAddin
                 case LayoutMode.ByConnections: LayoutGrid(visible.OrderByDescending(CountConnections).ThenBy(n => n.Name)); break;
                 case LayoutMode.ByDriver:      LayoutGroupedGrid(visible.OrderBy(n => n.Driver).ThenBy(n => n.Name)); break;
                 case LayoutMode.Circle:        LayoutCircle(visible);      break;
+                case LayoutMode.ForceDirected: LayoutForceDirected(visible); break;
+                case LayoutMode.HubSpoke:      LayoutHubSpoke(visible);    break;
+                case LayoutMode.Clusters:      LayoutClusters(visible);    break;
+                case LayoutMode.Tree:          LayoutTree(visible);        break;
             }
             UpdateCanvasSize();
             canvas.Invalidate();
+        }
+
+        // --- Force-directed (Fruchterman-Reingold, simplified) -------------
+        void LayoutForceDirected(IList<TableNode> visible)
+        {
+            int n = visible.Count;
+            if (n == 0) return;
+
+            var idx = new Dictionary<TableNode, int>();
+            for (int i = 0; i < n; i++) idx[visible[i]] = i;
+
+            double area = Math.Max(1600.0 * 1000.0, n * 45000.0);
+            double k = Math.Sqrt(area / n);
+            int W = (int)Math.Sqrt(area * 1.4);
+            int H = (int)Math.Sqrt(area / 1.4);
+
+            var pos = new PointF[n];
+            var disp = new PointF[n];
+            var rnd = new Random(42);
+            for (int i = 0; i < n; i++)
+                pos[i] = new PointF(rnd.Next(W), rnd.Next(H));
+
+            double t = Math.Max(W, H) / 10.0;
+            const int iterations = 160;
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                for (int i = 0; i < n; i++) disp[i] = PointF.Empty;
+
+                // repulsion
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < n; j++)
+                    {
+                        if (i == j) continue;
+                        double dx = pos[i].X - pos[j].X;
+                        double dy = pos[i].Y - pos[j].Y;
+                        double d = Math.Sqrt(dx * dx + dy * dy);
+                        if (d < 0.1) { d = 0.1; dx = 0.1; dy = 0; }
+                        double f = (k * k) / d;
+                        disp[i] = new PointF((float)(disp[i].X + dx / d * f), (float)(disp[i].Y + dy / d * f));
+                    }
+
+                // attraction via edges
+                foreach (var e in edges)
+                {
+                    int a, b;
+                    if (!idx.TryGetValue(e.From, out a)) continue;
+                    if (!idx.TryGetValue(e.To, out b))   continue;
+                    double dx = pos[a].X - pos[b].X;
+                    double dy = pos[a].Y - pos[b].Y;
+                    double d = Math.Sqrt(dx * dx + dy * dy);
+                    if (d < 0.1) d = 0.1;
+                    double f = (d * d) / k;
+                    disp[a] = new PointF((float)(disp[a].X - dx / d * f), (float)(disp[a].Y - dy / d * f));
+                    disp[b] = new PointF((float)(disp[b].X + dx / d * f), (float)(disp[b].Y + dy / d * f));
+                }
+
+                // apply, clamped by temperature
+                for (int i = 0; i < n; i++)
+                {
+                    double d = Math.Sqrt(disp[i].X * disp[i].X + disp[i].Y * disp[i].Y);
+                    if (d < 0.1) continue;
+                    double step = Math.Min(d, t);
+                    pos[i] = new PointF(
+                        (float)(pos[i].X + disp[i].X / d * step),
+                        (float)(pos[i].Y + disp[i].Y / d * step));
+                    pos[i] = new PointF(
+                        (float)Math.Max(0, Math.Min(W - NodeWidth, pos[i].X)),
+                        (float)Math.Max(0, Math.Min(H - NodeHeight, pos[i].Y)));
+                }
+                t *= 0.96;
+            }
+
+            for (int i = 0; i < n; i++)
+                visible[i].Bounds = new Rectangle(
+                    CanvasMargin + (int)pos[i].X,
+                    CanvasMargin + (int)pos[i].Y,
+                    NodeWidth, NodeHeight);
+        }
+
+        // --- Hub and spoke: most-connected at center, two concentric rings -
+        void LayoutHubSpoke(IList<TableNode> visible)
+        {
+            if (visible.Count == 0) return;
+
+            var hub = visible[0];
+            int hubC = CountConnections(hub);
+            foreach (var n in visible)
+            {
+                int c = CountConnections(n);
+                if (c > hubC) { hub = n; hubC = c; }
+            }
+
+            var level = new Dictionary<TableNode, int> { { hub, 0 } };
+            foreach (var e in edges)
+            {
+                if (e.From == hub && !level.ContainsKey(e.To))   level[e.To]   = 1;
+                if (e.To   == hub && !level.ContainsKey(e.From)) level[e.From] = 1;
+            }
+            foreach (var n in visible) if (!level.ContainsKey(n)) level[n] = 2;
+
+            var ring1 = visible.Where(x => level[x] == 1).OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            var ring2 = visible.Where(x => level[x] == 2).OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+            double r1 = 160 + Math.Max(0, ring1.Count) * 12;
+            double r2 = r1 + 180 + ring2.Count * 8;
+            double canvasSize = (r2 + NodeWidth) * 2 + CanvasMargin * 2;
+            double cx = canvasSize / 2;
+            double cy = canvasSize / 2;
+
+            hub.Bounds = new Rectangle((int)(cx - NodeWidth / 2.0), (int)(cy - NodeHeight / 2.0), NodeWidth, NodeHeight);
+
+            PlaceOnRing(ring1, cx, cy, r1);
+            PlaceOnRing(ring2, cx, cy, r2);
+        }
+
+        void PlaceOnRing(IList<TableNode> items, double cx, double cy, double radius)
+        {
+            int n = items.Count;
+            if (n == 0) return;
+            for (int i = 0; i < n; i++)
+            {
+                double angle = 2 * Math.PI * i / n - Math.PI / 2;
+                int x = (int)(cx + Math.Cos(angle) * radius - NodeWidth / 2.0);
+                int y = (int)(cy + Math.Sin(angle) * radius - NodeHeight / 2.0);
+                items[i].Bounds = new Rectangle(x, y, NodeWidth, NodeHeight);
+            }
+        }
+
+        // --- Clusters: one tile per connected component, packed on a grid --
+        void LayoutClusters(IList<TableNode> visible)
+        {
+            var set = new HashSet<TableNode>(visible);
+            var visited = new HashSet<TableNode>();
+            var comps = new List<List<TableNode>>();
+
+            foreach (var start in visible)
+            {
+                if (!visited.Add(start)) continue;
+                var comp = new List<TableNode> { start };
+                var queue = new Queue<TableNode>();
+                queue.Enqueue(start);
+                while (queue.Count > 0)
+                {
+                    var u = queue.Dequeue();
+                    foreach (var e in edges)
+                    {
+                        TableNode other = null;
+                        if (e.From == u && set.Contains(e.To))   other = e.To;
+                        else if (e.To == u && set.Contains(e.From)) other = e.From;
+                        if (other != null && visited.Add(other))
+                        {
+                            comp.Add(other);
+                            queue.Enqueue(other);
+                        }
+                    }
+                }
+                comps.Add(comp);
+            }
+
+            comps = comps.OrderByDescending(c => c.Count).ToList();
+
+            const int InnerPad = 18;
+            const int OuterGap = 30;
+            const int MaxRowWidth = 1600;
+
+            int xCursor = CanvasMargin;
+            int yCursor = CanvasMargin;
+            int rowHeight = 0;
+
+            foreach (var comp in comps)
+            {
+                int cols = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(comp.Count) * 1.1));
+                int rows = (int)Math.Ceiling(comp.Count / (double)cols);
+                int tileW = cols * NodeWidth  + (cols - 1) * 16 + InnerPad * 2;
+                int tileH = rows * NodeHeight + (rows - 1) * 16 + InnerPad * 2;
+
+                if (xCursor > CanvasMargin && xCursor + tileW > MaxRowWidth)
+                {
+                    xCursor = CanvasMargin;
+                    yCursor += rowHeight + OuterGap;
+                    rowHeight = 0;
+                }
+
+                int i = 0;
+                foreach (var node in comp.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    int col = i % cols;
+                    int row = i / cols;
+                    node.Bounds = new Rectangle(
+                        xCursor + InnerPad + col * (NodeWidth  + 16),
+                        yCursor + InnerPad + row * (NodeHeight + 16),
+                        NodeWidth, NodeHeight);
+                    i++;
+                }
+                xCursor   += tileW + OuterGap;
+                if (tileH > rowHeight) rowHeight = tileH;
+            }
+        }
+
+        // --- Tree: root per no-incoming node, centered parent over children -
+        void LayoutTree(IList<TableNode> visible)
+        {
+            var set = new HashSet<TableNode>(visible);
+            var childrenOf = new Dictionary<TableNode, List<TableNode>>();
+            var indeg = new Dictionary<TableNode, int>();
+            foreach (var n in visible) { childrenOf[n] = new List<TableNode>(); indeg[n] = 0; }
+            foreach (var e in edges)
+            {
+                if (!set.Contains(e.From) || !set.Contains(e.To)) continue;
+                childrenOf[e.From].Add(e.To);
+                indeg[e.To]++;
+            }
+
+            var roots = visible.Where(n => indeg[n] == 0)
+                               .OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase)
+                               .ToList();
+            if (roots.Count == 0 && visible.Count > 0) roots.Add(visible[0]);
+
+            int unitW = NodeWidth + 24;
+            int unitH = NodeHeight + 60;
+            var placed = new HashSet<TableNode>();
+            var width = new Dictionary<TableNode, int>();
+            var widthComputing = new HashSet<TableNode>();
+
+            Func<TableNode, int> computeWidth = null;
+            computeWidth = delegate(TableNode n)
+            {
+                if (width.ContainsKey(n)) return width[n];
+                if (!widthComputing.Add(n)) { width[n] = 1; return 1; } // cycle guard
+                var kids = childrenOf[n].Where(k => !width.ContainsKey(k) || !placed.Contains(k)).ToList();
+                int total = 0;
+                foreach (var k in kids) total += computeWidth(k);
+                width[n] = Math.Max(1, total);
+                return width[n];
+            };
+            foreach (var r in roots) computeWidth(r);
+
+            int xCol = 0;
+            foreach (var root in roots)
+            {
+                int used = PlaceSubtree(root, xCol, 0, childrenOf, placed, width, unitW, unitH);
+                xCol += used * unitW + 48;
+            }
+
+            // Orphans (cycles) — stack below the last tree.
+            var orphans = visible.Where(n => !placed.Contains(n)).ToList();
+            if (orphans.Count > 0)
+            {
+                int maxY = placed.Any() ? placed.Max(p => p.Bounds.Bottom) : CanvasMargin;
+                int y = maxY + 30;
+                int x = CanvasMargin;
+                foreach (var o in orphans)
+                {
+                    o.Bounds = new Rectangle(x, y, NodeWidth, NodeHeight);
+                    placed.Add(o);
+                    x += unitW;
+                }
+            }
+
+            // Shift so everything is in positive space with margin.
+            if (placed.Count > 0)
+            {
+                int minX = placed.Min(p => p.Bounds.X);
+                int minY = placed.Min(p => p.Bounds.Y);
+                int dx = CanvasMargin - minX;
+                int dy = CanvasMargin - minY;
+                if (dx != 0 || dy != 0)
+                    foreach (var n in placed)
+                        n.Bounds = new Rectangle(n.Bounds.X + dx, n.Bounds.Y + dy, NodeWidth, NodeHeight);
+            }
+        }
+
+        int PlaceSubtree(TableNode n, int x, int depth,
+            Dictionary<TableNode, List<TableNode>> childrenOf,
+            HashSet<TableNode> placed,
+            Dictionary<TableNode, int> width,
+            int unitW, int unitH)
+        {
+            if (!placed.Add(n)) return 0;
+
+            var kids = childrenOf[n].Where(k => !placed.Contains(k)).ToList();
+            int childX = x;
+            int used = 0;
+            foreach (var k in kids)
+            {
+                int u = PlaceSubtree(k, childX, depth + 1, childrenOf, placed, width, unitW, unitH);
+                childX += u * unitW;
+                used   += u;
+            }
+
+            int myX;
+            if (used > 0)
+                myX = x + ((used - 1) * unitW) / 2;
+            else
+            {
+                myX = x;
+                used = 1;
+            }
+            n.Bounds = new Rectangle(myX, depth * unitH, NodeWidth, NodeHeight);
+            return used;
         }
 
         int CountConnections(TableNode n)
