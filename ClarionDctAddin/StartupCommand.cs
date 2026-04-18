@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Reflection;
 using System.Windows.Forms;
@@ -14,6 +15,18 @@ namespace ClarionDctAddin
     // visual styling intact.
     internal class DictTaskerToolbarRenderer : ToolStripProfessionalRenderer
     {
+        // Standard "disabled icon" transform — luminance-weighted grayscale
+        // with reduced alpha, matches what WinForms does for stock disabled
+        // toolbar images.
+        static readonly ColorMatrix DisabledMatrix = new ColorMatrix(new float[][]
+        {
+            new float[] { 0.30f, 0.30f, 0.30f, 0,    0 },
+            new float[] { 0.59f, 0.59f, 0.59f, 0,    0 },
+            new float[] { 0.11f, 0.11f, 0.11f, 0,    0 },
+            new float[] { 0,     0,     0,     0.45f, 0 },
+            new float[] { 0,     0,     0,     0,    1 }
+        });
+
         readonly Image icon;
         public DictTaskerToolbarRenderer(Image icon) { this.icon = icon; }
 
@@ -23,7 +36,23 @@ namespace ClarionDctAddin
             {
                 var r = e.ImageRectangle;
                 if (r.Width > 0 && r.Height > 0)
-                    e.Graphics.DrawImage(icon, r);
+                {
+                    if (e.Item.Enabled)
+                    {
+                        e.Graphics.DrawImage(icon, r);
+                    }
+                    else
+                    {
+                        using (var attrs = new ImageAttributes())
+                        {
+                            attrs.SetColorMatrix(DisabledMatrix);
+                            e.Graphics.DrawImage(
+                                icon, r,
+                                0, 0, icon.Width, icon.Height,
+                                GraphicsUnit.Pixel, attrs);
+                        }
+                    }
+                }
                 return; // skip the base call so the stock icon is never drawn
             }
             base.OnRenderItemImage(e);
