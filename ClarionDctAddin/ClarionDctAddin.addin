@@ -9,7 +9,10 @@
 	</Manifest>
 
 	<Runtime>
-		<Import assembly = "ClarionDctAddin.dll"/>
+		<Import assembly = "ClarionDctAddin.dll">
+			<ConditionEvaluator name  = "DictionaryOpen"
+			                    class = "ClarionDctAddin.DictionaryOpenCondition"/>
+		</Import>
 	</Runtime>
 
 	<Path name = "/Workspace/Autostart">
@@ -37,10 +40,12 @@
 		    (or once the custom ico is shipped as a real embedded .resx that
 		    ResourceService discovers natively).
 		-->
-		<ToolbarItem id      = "DictTaskerLauncher"
-		             icon    = "Icons.24x24.StartPage"
-		             tooltip = "Open Dictionary Tasker"
-		             class   = "ClarionDctAddin.LauncherCommand"/>
+		<Condition name = "DictionaryOpen" action = "Disable">
+			<ToolbarItem id      = "DictTaskerLauncher"
+			             icon    = "Icons.24x24.StartPage"
+			             tooltip = "Open Dictionary Tasker"
+			             class   = "ClarionDctAddin.LauncherCommand"/>
+		</Condition>
 	</Path>
 
 
