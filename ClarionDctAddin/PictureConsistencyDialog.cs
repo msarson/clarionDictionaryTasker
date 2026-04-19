@@ -11,7 +11,9 @@ namespace ClarionDctAddin
     //   DATE   without @d*  -> warning
     //   TIME   without @t*  -> warning
     //   DECIMAL / REAL without @n -> warning; suggest @n$*.* for money-like labels
-    //   BYTE / SHORT / LONG without @n -> info
+    //   BYTE / SHORT / USHORT without @n -> info
+    //   LONG / ULONG: also accept @d* and @t* (Clarion uses LONG as the
+    //     underlying storage for dates and times)
     //   STRING / CSTRING / PSTRING with @n or @d picture -> error
     //   Same label on many tables with divergent pictures -> warning
     internal class PictureConsistencyDialog : Form
@@ -137,7 +139,15 @@ namespace ClarionDctAddin
                         else if (LooksLikeMoney(label) && picL.IndexOf('$') < 0)
                             findings.Add(N(Sev.Info, tName, label, dt, pic, "Money-ish label; consider @n$*.* with currency marker."));
                     }
-                    else if (dt == "BYTE" || dt == "SHORT" || dt == "USHORT" || dt == "LONG" || dt == "ULONG")
+                    else if (dt == "LONG" || dt == "ULONG")
+                    {
+                        // Clarion commonly stores dates / times as LONG with @d* or @t* pictures.
+                        if (!string.IsNullOrEmpty(pic)
+                            && !picL.StartsWith("@n") && !picL.StartsWith("@d") && !picL.StartsWith("@t"))
+                            findings.Add(N(Sev.Warning, tName, label, dt, pic,
+                                "LONG picture should be @n*, @d*, or @t*."));
+                    }
+                    else if (dt == "BYTE" || dt == "SHORT" || dt == "USHORT")
                     {
                         if (!string.IsNullOrEmpty(pic) && !picL.StartsWith("@n"))
                             findings.Add(N(Sev.Warning, tName, label, dt, pic, "Integer picture should start with @n."));

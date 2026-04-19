@@ -180,7 +180,18 @@ namespace ClarionDctAddin
                                         Message = "Money-looking label '" + label + "' has no currency marker; consider @n$*.*." });
                 return;
             }
-            if (dt == "BYTE" || dt == "SHORT" || dt == "USHORT" || dt == "LONG" || dt == "ULONG")
+            if (dt == "LONG" || dt == "ULONG")
+            {
+                // LONG is Clarion's native underlying storage for DATE (days since
+                // epoch) and TIME (centiseconds since midnight), so @d* and @t* are
+                // perfectly legitimate pictures on a LONG/ULONG. Only flag when the
+                // picture isn't numeric, date, or time.
+                if (!p.StartsWith("@n") && !p.StartsWith("@d") && !p.StartsWith("@t"))
+                    f.Add(new Finding { Severity = Severity.Warning, Target = target, Rule = "picture-int-shape",
+                                        Message = "Integer field has picture '" + picture + "'; expected @n*, @d*, or @t*." });
+                return;
+            }
+            if (dt == "BYTE" || dt == "SHORT" || dt == "USHORT")
             {
                 if (!p.StartsWith("@n"))
                     f.Add(new Finding { Severity = Severity.Warning, Target = target, Rule = "picture-int-shape",

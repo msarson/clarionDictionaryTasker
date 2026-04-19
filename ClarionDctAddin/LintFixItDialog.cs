@@ -259,7 +259,10 @@ namespace ClarionDctAddin
                 else if (dt == "TIME" && !p.StartsWith("@t"))      out1.Add("TIME needs @t*");
                 else if ((dt == "DECIMAL" || dt == "PDECIMAL" || dt == "REAL" || dt == "SREAL")
                       && !p.StartsWith("@n"))                      out1.Add("numeric needs @n*");
-                else if ((dt == "BYTE" || dt == "SHORT" || dt == "USHORT" || dt == "LONG" || dt == "ULONG")
+                else if ((dt == "LONG" || dt == "ULONG")
+                      && !p.StartsWith("@n") && !p.StartsWith("@d") && !p.StartsWith("@t"))
+                    out1.Add("LONG needs @n*, @d*, or @t*");
+                else if ((dt == "BYTE" || dt == "SHORT" || dt == "USHORT")
                       && !p.StartsWith("@n"))                      out1.Add("integer needs @n*");
                 else if ((dt == "STRING" || dt == "CSTRING" || dt == "PSTRING")
                       && (p.StartsWith("@d") || p.StartsWith("@t") || p.StartsWith("@n")))
