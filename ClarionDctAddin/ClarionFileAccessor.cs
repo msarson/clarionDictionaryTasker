@@ -126,79 +126,38 @@ namespace ClarionDctAddin
             byte[] record = new byte[Math.Max(1, recordSize)];
             r.Log.Add("record size: " + recordSize + " bytes");
 
-            // 5. Construct CFile. Dump available ctors to the log first so if
-            //    we fall through every path, the user has something to paste back.
+            // 5. Instantiate the emitted concrete CFile subclass. Since CFile
+            //    only has a parameterless ctor, and our emitted type inherits
+            //    that, default-ctor is the only valid path for instantiation.
             object cfile = null;
             var claStringType = ResolveClaStringType(fileIo, r);
-            LogCtors(cfileType, "CFile", r);
+            LogCtors(cfileBaseType, "CFile",     r);
             if (claStringType != null) LogCtors(claStringType, "ClaString", r);
+            LogInstanceMembers(cfileBaseType, r);
 
-            // 5a. Try default ctor + property sets first — this path doesn't need
-            // a ClaString and is therefore less fragile. Property setters on CFile
-            // usually accept plain strings (the wrapper is convenience, not required).
             try
             {
-                var defCtor = cfileType.GetConstructor(Type.EmptyTypes);
-                if (defCtor != null)
-                {
-                    cfile = defCtor.Invoke(null);
-                    r.Log.Add("ctor() default ok");
-                    bool drvOk  = TrySet(cfile, "Driver", driver, r);
-                    bool nameOk = TrySet(cfile, "Name",   path,   r)
-                               || TrySet(cfile, "FileName", path, r)
-                               || TrySet(cfile, "FullPathName", path, r);
-                    if (!drvOk || !nameOk)
-                    {
-                        r.Log.Add("default-ctor path couldn't set Driver/Name — will try 4-arg");
-                        cfile = null;
-                    }
-                    else
-                    {
-                        // Some CFile flavours also want the buffer set explicitly.
-                        TrySet(cfile, "Record", record, r);
-                        TrySet(cfile, "Buffer", record, r);
-                    }
-                }
+                cfile = Activator.CreateInstance(cfileType);
+                r.Log.Add("instantiated emitted subclass ok");
             }
             catch (Exception ex)
             {
-                r.Log.Add("default-ctor path failed: " + (ex.InnerException ?? ex).GetType().Name + " - " + (ex.InnerException ?? ex).Message);
-                cfile = null;
+                var inner = ex.InnerException ?? ex;
+                r.Log.Add("CreateInstance failed: " + inner.GetType().Name + " - " + inner.Message);
+                r.Ok = false;
+                r.Error = "Could not instantiate the emitted CFile subclass: " + inner.Message;
+                return;
             }
 
-            // 5b. Fall back to the 4-arg ctor with string-typed positional args.
-            // Modern reflection will coerce string -> ClaString through implicit
-            // converters if the type defines any.
-            if (cfile == null && claStringType != null)
-            {
-                try
-                {
-                    var fourArgCtor = cfileType.GetConstructor(new[] { typeof(byte[]), claStringType, claStringType, claStringType });
-                    if (fourArgCtor != null)
-                    {
-                        var drvWrap  = WrapClaString(claStringType, driver, r);
-                        var pathWrap = WrapClaString(claStringType, path,   r);
-                        var optWrap  = WrapClaString(claStringType, "",     r);
-                        r.Log.Add("4-arg args: drv=" + (drvWrap == null ? "null" : "ok")
-                                + ", path=" + (pathWrap == null ? "null" : "ok")
-                                + ", opt=" + (optWrap == null ? "null" : "ok"));
-                        if (drvWrap != null && pathWrap != null && optWrap != null)
-                        {
-                            cfile = fourArgCtor.Invoke(new object[] { record, drvWrap, pathWrap, optWrap });
-                            r.Log.Add("ctor(byte[], driver, path, options) ok");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    r.Log.Add("4-arg ctor failed: " + (ex.InnerException ?? ex).GetType().Name + " - " + (ex.InnerException ?? ex).Message);
-                }
-            }
-
-            if (cfile == null)
+            // 6. Configure the instance with driver + file path. Clarion-generated
+            //    CFile subclasses do this in their ctor via direct field / method
+            //    calls rather than properties; we replicate by trying every
+            //    plausible member shape.
+            bool configOk = ConfigureCFile(cfile, cfileBaseType, claStringType, driver, path, record, r);
+            if (!configOk)
             {
                 r.Ok = false;
-                r.Error = "Could not construct CFile via any known path — see log for the ctor list.";
+                r.Error = "Could not set name / driver on the CFile — see the instance-members dump in the log to find the right member.";
                 return;
             }
 
@@ -569,6 +528,187 @@ namespace ClarionDctAddin
             }
 
             tb.DefineMethodOverride(mb, abs);
+        }
+
+        // Dump every declared field + method on CFile and its ancestors so
+        // after a failed run the log tells us exactly which member to use.
+        // Field dump excludes compiler-generated backing fields; method dump
+        // skips Object's inherited methods.
+        static void LogInstanceMembers(Type t, ReadResult r)
+        {
+            if (t == null) return;
+            var cur = t;
+            while (cur != null && cur != typeof(object))
+            {
+                foreach (var f in cur.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                                  .OrderBy(x => x.Name))
+                {
+                    if (f.Name.IndexOf("k__BackingField", StringComparison.Ordinal) >= 0) continue;
+                    var vis = f.IsPublic ? "public " : (f.IsFamily ? "protected " : (f.IsAssembly ? "internal " : "private "));
+                    r.Log.Add("field  [" + cur.Name + "]: " + vis + f.FieldType.Name + " " + f.Name);
+                }
+                foreach (var m in cur.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                                    .OrderBy(x => x.Name))
+                {
+                    if (m.IsSpecialName) continue; // skip property getters/setters
+                    var vis = m.IsPublic ? "public " : (m.IsFamily ? "protected " : (m.IsAssembly ? "internal " : "private "));
+                    var ps = m.GetParameters();
+                    var sb = new StringBuilder();
+                    for (int i = 0; i < ps.Length; i++) { if (i > 0) sb.Append(", "); sb.Append(ps[i].ParameterType.Name); }
+                    r.Log.Add("method [" + cur.Name + "]: " + vis + m.ReturnType.Name + " " + m.Name + "(" + sb + ")");
+                }
+                cur = cur.BaseType;
+            }
+        }
+
+        // Find the right member on CFile for name + driver. Clarion-generated
+        // subclasses populate these in their ctors — here we probe every
+        // plausible field and method name, passing either raw strings or
+        // ClaString wraps depending on the member's expected type.
+        static bool ConfigureCFile(object cfile, Type cfileBase, Type claStringType, string driver, string path, byte[] record, ReadResult r)
+        {
+            bool nameOk   = SetNameOrPath(cfile, cfileBase, claStringType, path,   r);
+            bool driverOk = SetDriver    (cfile, cfileBase, claStringType, driver, r);
+            // Some CFile implementations hold the record buffer themselves;
+            // others take it as a ctor arg. Try every candidate shape.
+            TryAssignRecordBuffer(cfile, cfileBase, record, r);
+            return nameOk && driverOk;
+        }
+
+        static bool SetNameOrPath(object cfile, Type cfileBase, Type claStringType, string path, ReadResult r)
+        {
+            // Field names seen in Clarion-generated code and past diagnostic runs.
+            string[] fieldCands = { "Name", "name", "_Name", "_name",
+                                    "FileName", "fileName", "_FileName", "_fileName",
+                                    "FullPathName", "fullPathName",
+                                    "fileFullPath",
+                                    "__CLA_FileName", "__CLA_Name",
+                                    "clsName", "sName", "m_Name", "m_FileName" };
+            foreach (var n in fieldCands)
+                if (SetFieldAnyShape(cfile, cfileBase, n, claStringType, path, r))
+                    { r.Log.Add("name set via field '" + n + "'"); return true; }
+
+            // Method names: SetName, UseFile, Assign, Create, etc.
+            string[] methodCands = { "SetName", "setName", "SetFileName", "UseFile",
+                                     "Assign", "AssignName", "SetPath", "Create",
+                                     "Init", "Open" };
+            foreach (var mName in methodCands)
+                if (InvokeWithStringOrClaString(cfile, cfileBase, mName, claStringType, path, r))
+                    { r.Log.Add("name set via method '" + mName + "'"); return true; }
+
+            return false;
+        }
+
+        static bool SetDriver(object cfile, Type cfileBase, Type claStringType, string driver, ReadResult r)
+        {
+            string[] fieldCands = { "Driver", "driver", "_Driver", "_driver",
+                                    "DriverName", "driverName",
+                                    "__CLA_Driver", "m_Driver" };
+            foreach (var n in fieldCands)
+                if (SetFieldAnyShape(cfile, cfileBase, n, claStringType, driver, r))
+                    { r.Log.Add("driver set via field '" + n + "'"); return true; }
+
+            string[] methodCands = { "SetDriver", "setDriver", "UseDriver" };
+            foreach (var mName in methodCands)
+                if (InvokeWithStringOrClaString(cfile, cfileBase, mName, claStringType, driver, r))
+                    { r.Log.Add("driver set via method '" + mName + "'"); return true; }
+
+            return false;
+        }
+
+        static void TryAssignRecordBuffer(object cfile, Type cfileBase, byte[] record, ReadResult r)
+        {
+            string[] names = { "Record", "record", "_Record", "Buffer", "buffer",
+                               "RecordBuffer", "__CLA_RecordBuffer",
+                               "Memory", "memory", "m_Record" };
+            foreach (var n in names)
+                if (TrySetFieldRaw(cfile, cfileBase, n, record))
+                    { r.Log.Add("record buffer set via field '" + n + "'"); return; }
+        }
+
+        // Sets a field of the given name, trying both plain string and ClaString-wrapped
+        // values depending on the field's declared type. Walks the class chain with
+        // DeclaredOnly so inherited non-public fields are found.
+        static bool SetFieldAnyShape(object target, Type baseType, string name, Type claStringType, string value, ReadResult r)
+        {
+            var cur = target.GetType();
+            while (cur != null && cur != typeof(object))
+            {
+                var f = cur.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (f != null)
+                {
+                    try
+                    {
+                        object toSet = value;
+                        if (f.FieldType == typeof(string))
+                        {
+                            // fine as-is
+                        }
+                        else if (f.FieldType == typeof(byte[]))
+                        {
+                            toSet = Encoding.GetEncoding(1252).GetBytes(value ?? "");
+                        }
+                        else if (claStringType != null && claStringType.IsAssignableFrom(f.FieldType))
+                        {
+                            toSet = WrapClaString(claStringType, value, r);
+                            if (toSet == null) return false;
+                        }
+                        else
+                        {
+                            // unknown field type — skip
+                            return false;
+                        }
+                        f.SetValue(target, toSet);
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        r.Log.Add("set field " + name + " on " + cur.Name + " threw: " + (ex.InnerException ?? ex).Message);
+                        return false;
+                    }
+                }
+                cur = cur.BaseType;
+            }
+            return false;
+        }
+
+        static bool TrySetFieldRaw(object target, Type baseType, string name, object value)
+        {
+            var cur = target.GetType();
+            while (cur != null && cur != typeof(object))
+            {
+                var f = cur.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (f != null && f.FieldType.IsAssignableFrom(value.GetType()))
+                {
+                    try { f.SetValue(target, value); return true; } catch { return false; }
+                }
+                cur = cur.BaseType;
+            }
+            return false;
+        }
+
+        static bool InvokeWithStringOrClaString(object target, Type baseType, string methodName, Type claStringType, string value, ReadResult r)
+        {
+            var cur = target.GetType();
+            while (cur != null && cur != typeof(object))
+            {
+                foreach (var m in cur.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    if (m.Name != methodName) continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length != 1) continue;
+                    object arg;
+                    if (ps[0].ParameterType == typeof(string)) arg = value;
+                    else if (claStringType != null && claStringType.IsAssignableFrom(ps[0].ParameterType))
+                        arg = WrapClaString(claStringType, value, r);
+                    else continue;
+                    if (arg == null) continue;
+                    try { m.Invoke(target, new[] { arg }); return true; }
+                    catch (Exception ex) { r.Log.Add("invoke " + methodName + " threw: " + (ex.InnerException ?? ex).Message); return false; }
+                }
+                cur = cur.BaseType;
+            }
+            return false;
         }
 
         static void LogAbstractMembers(Type t, ReadResult r)
