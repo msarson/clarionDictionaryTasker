@@ -1,23 +1,44 @@
 # clarionDictionaryTasker
 
-Clarion Dictionary Addin with Assistant, Tasker, Viewer, Organization, etc.
-
-A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently open dictionary and exports table structures to JSON — without ever parsing the binary `.DCT` file on disk.
+A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently open dictionary and offers a growing catalogue of read-only and batch tools — without ever parsing the binary `.DCT` file on disk.
 
 ## Features
 
-- **Browse tables** — modal list of every table in the open dictionary with driver / prefix / field count / description.
-- **Show fields** — per-table column view: `Name`, `Type`, `Size`, `Places`, `Picture`, `Heading`, `Prompt`, `Description`, `External name`, ...
-- **Tree view** — full hierarchical explorer: dictionary → tables → Fields / Keys / Relations / Triggers → individual items with their properties as leaves. Lazy-loaded for large dictionaries.
-- **Relations diagram** — auto-laid-out boxes-and-arrows chart of parent/child relationships between tables.
-- **JSON export** — one table, selected tables, or the whole dictionary. Hand-picked schema for `DDFile` + `DDField` and reflection fallback for other collections.
-- **Field inspector** — full reflection dump of any `DDField` for diagnostics / schema tuning.
+### Browse & navigate
+- **Launcher** — tiled home screen with quick access to the main views and the full tools catalogue.
+- **Browse tables** — modal list with driver / prefix / field count / description.
+- **Show fields** — per-table column view (`Name`, `Type`, `Size`, `Places`, `Picture`, `Heading`, `Prompt`, `Description`, `External name`, ...).
+- **Tree view** — hierarchical dictionary → tables → Fields / Keys / Relations / Triggers → leaf properties. Lazy-loaded for large dictionaries.
+- **Relations diagram** — auto-laid-out boxes-and-arrows chart.
+- **Field inspector** — full reflection dump for schema-tuning / diagnostics.
+
+### Batch operations (write)
+- **Batch copy fields** across selected target tables.
+- **Batch copy keys**, with automatic component remapping and generated `ExternalName = <TargetTable>_<KeyLabel>`.
+- Automatic `.tasker-bak-*` backup of the `.DCT` before any mutation.
+
+### Validation & analysis (read-only)
+- **Lint report** — missing primary keys, empty tables, orphaned relations, duplicate keys, undocumented fields.
+- **Health dashboard** — totals, top-10 largest tables, driver mix bar chart, relations-per-table histogram.
+- **Dead tables** — tables with no relations and no references elsewhere.
+- **Duplicate fields** — fields with identical label + type + size appearing on many tables — candidates for extraction.
+
+### Generation & export
+- **SQL DDL export** — live preview window, 5 dialects (SQL Server, PostgreSQL, SQLite, MySQL, MariaDB). Whole dictionary or single table. Remembers the preferred dialect.
+- **Markdown documentation** — single-document reference (tables, fields, keys, relations) with optional TOC. Copy or save as `.md`.
+- **JSON export** — one table, selected tables, or the whole dictionary.
+
+### Right-click integration
+Right-click a table in the **Tables list**, **Tree view**, or **Relations diagram** to jump straight to per-table actions (Show fields, Export SQL DDL, Markdown, ...).
+
+### Tools catalogue
+The **Dictionary tools** dialog lists every planned tool, grouped by category. **Bold buttons = implemented**, greyed "(planned)" buttons are placeholders for future work.
 
 ## How it works
 
 The Clarion 12 IDE is built on **SharpDevelop 2.1** (`ICSharpCode.SharpDevelop`). Add-ins are a standard .NET 4.0 DLL plus an `.addin` XML manifest dropped into `C:\clarion12\bin\Addins\`.
 
-This add-in reaches the live dictionary model via reflection, walking:
+The add-in reaches the live dictionary model via reflection:
 
 ```
 IViewContent                                              (SharpDevelop active window)
@@ -32,7 +53,7 @@ There is no compile-time reference to any SoftVelocity assembly, so the add-in s
 
 ## Build
 
-Requires Visual Studio with the **.NET Framework 4.0 targeting pack** installed (change `<TargetFramework>` in the `.csproj` to `net45` / `net48` if you prefer).
+Requires Visual Studio with the **.NET Framework 4.0 targeting pack** installed.
 
 ```
 dotnet build -c Debug
@@ -52,35 +73,46 @@ which copies `ClarionDctAddin.dll` + `ClarionDctAddin.addin` to:
 C:\clarion12\bin\Addins\Misc\ClarionDctAddin\
 ```
 
-Restart Clarion 12 and look for the new **Dict Tools** top-level menu next to View.
+Restart Clarion 12 and look for the **Dictionary Tasker** toolbar icon (greyed-out until a dictionary is open).
 
-## Menu entries
+## Settings
 
-| Menu | What it does |
-| --- | --- |
-| Dict Tools → **Browse tables...** | Open the tabbed dictionary browser. |
-| Dict Tools → **Hello (addin loaded)** | Sanity check that the add-in is live. |
-| Dict Tools → **Reflection dump (debug)...** | Full reflection dump of the active view — used during development to discover type shapes. |
+User preferences (e.g. preferred SQL dialect) live in:
+
+```
+%LOCALAPPDATA%\ClarionDctAddin\settings.txt
+```
 
 ## File layout
 
 | File | Role |
 | --- | --- |
-| `ClarionDctAddin.addin` | SharpDevelop manifest — declares menu items & command classes. |
-| `HelloCommand.cs` | Trivial command used as a smoke test. |
-| `BrowseTablesCommand.cs` | Opens the main dialog. |
-| `ListTablesCommand.cs` | Reflection-only debug dump. |
+| `ClarionDctAddin.addin` | SharpDevelop manifest — toolbar item, condition evaluators, autostart. |
+| `StartupCommand.cs` | Toolbar icon swap / enable state. |
+| `DictionaryOpenCondition.cs` | Enables the toolbar icon only when a dictionary is open. |
+| `LauncherDialog.cs` | Home screen with tiles. |
 | `DictModel.cs` | Reflection helpers that find the live dictionary model. |
-| `TableListDialog.cs` | Tabbed modal (Tables / Tree / Relations). |
-| `FieldListDialog.cs` | Per-table field browser with inspector. |
+| `TableListDialog.cs` | Tabbed modal (Tables / Tree / Relations) with right-click menus. |
 | `DictTreeViewPanel.cs` | Hierarchy explorer. |
 | `RelationsDiagramPanel.cs` | Custom-painted layered relations diagram. |
+| `FieldListDialog.cs` | Per-table field browser. |
+| `ToolsDialog.cs` | Tools catalogue (bold = implemented). |
+| `LintReportDialog.cs` | Validation findings. |
+| `HealthDashboardDialog.cs` | Stats / charts. |
+| `DeadTablesDialog.cs` | Tables with no relations. |
+| `DuplicateFieldsDialog.cs` | Fields appearing on multiple tables. |
+| `SqlDdlDialog.cs` / `SqlDdlGenerator.cs` | DDL preview + 5-dialect generator. |
+| `MarkdownDialog.cs` / `MarkdownGenerator.cs` | Markdown preview + generator. |
+| `BatchCopyFieldsDialog.cs` | Batch field propagation. |
+| `BatchCopyKeysDialog.cs` | Batch key propagation with component remap. |
 | `JsonExporter.cs` | Dependency-free JSON writer. |
+| `Settings.cs` | `%LOCALAPPDATA%` key=value settings. |
+| `docs/index.html` | Embedded HTML manual (Help button). |
 
 ## Notes
 
 - Tested against Clarion 12.0.13941.
-- The add-in targets .NET Framework 4.0 because that's what Clarion 12 loads (`<supportedRuntime version="v4.0"/>` in `Clarion.exe.config`). Higher framework versions work if your JIT environment supports them.
+- The add-in targets .NET Framework 4.0 because that's what Clarion 12 loads.
 
 ## License
 

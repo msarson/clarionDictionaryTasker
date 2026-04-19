@@ -84,11 +84,17 @@ namespace ClarionDctAddin
             body.Controls.Add(MakeSection("Analysis & stats", new[]
             {
                 new ToolDef { Name = "Health dashboard",
-                              Description = "Table count, field-per-table distribution, relation density, driver mix, largest tables." },
+                              Description = "Table count, field-per-table distribution, relation density, driver mix, largest tables.",
+                              Implemented = true,
+                              OnClick = delegate { OpenHealthDashboard(); } },
                 new ToolDef { Name = "Dead tables report",
-                              Description = "Tables with no relations and no references anywhere — candidates for deletion." },
+                              Description = "Tables with no relations and no references anywhere — candidates for deletion.",
+                              Implemented = true,
+                              OnClick = delegate { OpenDeadTables(); } },
                 new ToolDef { Name = "Duplicate fields",
-                              Description = "Fields with identical label + type + size appearing in many tables — candidates for extraction." },
+                              Description = "Fields with identical label + type + size appearing in many tables — candidates for extraction.",
+                              Implemented = true,
+                              OnClick = delegate { OpenDuplicateFields(); } },
             }));
 
             body.Controls.Add(MakeSection("Search & navigation", new[]
@@ -120,7 +126,9 @@ namespace ClarionDctAddin
                 new ToolDef { Name = "Model classes (TypeScript)",
                               Description = "Same idea, TypeScript interfaces — usable from front-end code and OpenAPI generation." },
                 new ToolDef { Name = "Markdown documentation",
-                              Description = "Per-table .md reference pages: fields table, keys, relations, sample JSON. Browseable intranet documentation." },
+                              Description = "Full dictionary reference as a single Markdown document — tables, fields, keys, relations. Copy or save to .md.",
+                              Implemented = true,
+                              OnClick = delegate { OpenMarkdown(); } },
             }));
 
             body.Controls.Add(MakeSection("Refactoring", new[]
@@ -200,7 +208,7 @@ namespace ClarionDctAddin
                     Height = 32,
                     FlatStyle = FlatStyle.System,
                     Margin = new Padding(0, 0, 10, 6),
-                    Font = new Font("Segoe UI", 9F),
+                    Font = new Font("Segoe UI", 9F, tool.Implemented ? FontStyle.Bold : FontStyle.Regular),
                     TextAlign = ContentAlignment.MiddleCenter,
                     ForeColor = tool.Implemented ? SystemColors.ControlText : MutedColor,
                 };
@@ -237,6 +245,34 @@ namespace ClarionDctAddin
         {
             Hide();
             using (var dlg = new SqlDdlDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenMarkdown()
+        {
+            Hide();
+            using (var dlg = new MarkdownDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenHealthDashboard()
+        {
+            Hide();
+            using (var dlg = new HealthDashboardDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenDeadTables()
+        {
+            Hide();
+            using (var dlg = new DeadTablesDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenDuplicateFields()
+        {
+            Hide();
+            using (var dlg = new DuplicateFieldsDialog(dict)) dlg.ShowDialog(this);
             Show();
         }
     }
