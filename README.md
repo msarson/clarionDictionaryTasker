@@ -19,6 +19,8 @@ A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently ope
 
 ### Validation & analysis (read-only)
 - **Lint report** — missing primary keys, empty tables, orphaned relations, duplicate keys, undocumented fields.
+- **Picture consistency** — flag DATE fields without `@d*`, numerics without `@n*`, STRING with a non-string picture, and labels that appear on many tables with divergent (type, picture) combos.
+- **Naming conventions** — tables UPPERCASE, prefixes 2-4 uppercase chars, labels with no whitespace / no digit-start, key-naming convention. Rules togglable at runtime.
 - **Health dashboard** — totals, top-10 largest tables, driver mix bar chart, relations-per-table histogram.
 - **Dead tables** — tables with no relations and no references elsewhere.
 - **Duplicate fields** — fields with identical label + type + size appearing on many tables — candidates for extraction.
@@ -31,6 +33,13 @@ A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently ope
 ### Compare & diff
 - **Compare tables** — pick two tables in the current dict, diff their fields + keys side-by-side (Same / Differs / Only-A / Only-B).
 - **Compare dictionaries** — save a `*.tasker-snap` snapshot of the current dict, later load it and compare against the live dict (or a completely different dict). Tree view of Added / Removed / Changed tables with field-, key-, and relation-level drill-down. Exportable as Markdown.
+- **Change-log generator** — pick two `*.tasker-snap` save-points, emit a human-readable Markdown changelog suitable for a release note or a PR description.
+
+### Visualization
+- **Export relations map** — standalone SVG with a grid layout (sorted by degree, isolated tables hideable). Self-contained — no external renderer required.
+
+### Refactoring
+- **Standard audit pack** — preview-only: pick tables + pack fields (Guid, CreatedOn/By, ModifiedOn/By, DeletedOn), emit a Markdown recipe of what would be added. Pair with **Batch copy fields** to apply.
 
 ### Generation & export
 - **SQL DDL export** — live preview window, 5 dialects (SQL Server, PostgreSQL, SQLite, MySQL, MariaDB). Whole dictionary or single table. Remembers the preferred dialect.
@@ -111,6 +120,11 @@ User preferences (e.g. preferred SQL dialect) live in:
 | `HealthDashboardDialog.cs` | Stats / charts. |
 | `DeadTablesDialog.cs` | Tables with no relations. |
 | `DuplicateFieldsDialog.cs` | Fields appearing on multiple tables. |
+| `PictureConsistencyDialog.cs` | Lint pictures against their data types. |
+| `NamingConventionsDialog.cs` | Configurable naming-rule violations. |
+| `ChangeLogDialog.cs` | Two-snapshot Markdown changelog generator. |
+| `RelationsMapExportDialog.cs` | Grid-layout SVG export of the relation graph. |
+| `StandardAuditPackDialog.cs` | Preview + Markdown recipe for the audit pack. |
 | `GlobalSearchDialog.cs` | Full-dict search across tables/fields/keys/relations/triggers. |
 | `WhereUsedDialog.cs` | Find every key / relation / trigger that references a given field. |
 | `PathFinderDialog.cs` | Shortest relation path between two tables. |

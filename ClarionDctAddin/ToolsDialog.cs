@@ -76,9 +76,13 @@ namespace ClarionDctAddin
                               Implemented = true,
                               OnClick = delegate { OpenLint(); } },
                 new ToolDef { Name = "Picture consistency",
-                              Description = "Flag fields where a DATE doesn't use @d*, money fields without @n$*.*, STRING without @s*." },
+                              Description = "Flag fields where a DATE doesn't use @d*, money fields without @n$*.*, STRING with a non-string picture. Cross-table consistency check included.",
+                              Implemented = true,
+                              OnClick = delegate { OpenPictureConsistency(); } },
                 new ToolDef { Name = "Naming conventions",
-                              Description = "Configurable rules: prefixes must be uppercase 2-4 chars, labels snake_case, no whitespace, etc." },
+                              Description = "Configurable rules: tables UPPERCASE, prefixes 2-4 uppercase chars, labels with no whitespace / no digit-start, key-naming convention.",
+                              Implemented = true,
+                              OnClick = delegate { OpenNamingConventions(); } },
             }));
 
             body.Controls.Add(MakeSection("Analysis & stats", new[]
@@ -154,13 +158,17 @@ namespace ClarionDctAddin
                 new ToolDef { Name = "Batch retype fields",
                               Description = "Select every field matching a name pattern, change type / size / picture in one shot." },
                 new ToolDef { Name = "Standard audit pack",
-                              Description = "Preset: adds guid, CreatedOn/By, ModifiedOn/By, DeletedOn + unique key + triggers to every selected table." },
+                              Description = "Preset: adds guid, CreatedOn/By, ModifiedOn/By, DeletedOn + unique key + triggers to every selected table. This version is preview-only — emits a Markdown recipe.",
+                              Implemented = true,
+                              OnClick = delegate { OpenStandardAuditPack(); } },
             }));
 
             body.Controls.Add(MakeSection("Visualization", new[]
             {
                 new ToolDef { Name = "Export relations map",
-                              Description = "Render the current relations-tab layout as SVG or PDF — suitable for a printable poster." },
+                              Description = "Render a standalone SVG relations map (grid layout, sorted by degree). Suitable for a printable poster or README embedding.",
+                              Implemented = true,
+                              OnClick = delegate { OpenRelationsMap(); } },
             }));
 
             body.Controls.Add(MakeSection("Enterprise glue", new[]
@@ -168,7 +176,9 @@ namespace ClarionDctAddin
                 new ToolDef { Name = "Git commit hook",
                               Description = "After save, if the DCT is in a repo, auto-commit with a generated message based on the diff from the previous version." },
                 new ToolDef { Name = "Change-log generator",
-                              Description = "Compare the current DCT to a previous save-point, emit a human-readable changelog." },
+                              Description = "Compare two *.tasker-snap save-points and emit a human-readable Markdown changelog.",
+                              Implemented = true,
+                              OnClick = delegate { OpenChangeLog(); } },
             }));
 
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = PanelColor, Padding = new Padding(16, 10, 16, 10) };
@@ -329,6 +339,41 @@ namespace ClarionDctAddin
         {
             Hide();
             using (var dlg = new ModelClassesDialog(dict, language)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenPictureConsistency()
+        {
+            Hide();
+            using (var dlg = new PictureConsistencyDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenNamingConventions()
+        {
+            Hide();
+            using (var dlg = new NamingConventionsDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenChangeLog()
+        {
+            Hide();
+            using (var dlg = new ChangeLogDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenRelationsMap()
+        {
+            Hide();
+            using (var dlg = new RelationsMapExportDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenStandardAuditPack()
+        {
+            Hide();
+            using (var dlg = new StandardAuditPackDialog(dict)) dlg.ShowDialog(this);
             Show();
         }
     }
