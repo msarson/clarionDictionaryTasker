@@ -110,9 +110,13 @@ namespace ClarionDctAddin
             body.Controls.Add(MakeSection("Compare & diff", new[]
             {
                 new ToolDef { Name = "Compare dictionaries",
-                              Description = "Open two .DCTs, structural diff — added/removed tables, changed fields, renamed items. Exportable report." },
+                              Description = "Save a snapshot of the current dict, then compare a later version (or a different dict) against it. Structural diff: added/removed tables, changed fields, changed keys. Exportable as Markdown.",
+                              Implemented = true,
+                              OnClick = delegate { OpenCompareDictionaries(); } },
                 new ToolDef { Name = "Compare tables",
-                              Description = "Diff two tables within one dictionary. Useful for CLIENTES vs CLIENTES_ARCHIVO." },
+                              Description = "Diff two tables within one dictionary. Useful for CLIENTES vs CLIENTES_ARCHIVO.",
+                              Implemented = true,
+                              OnClick = delegate { OpenCompareTables(); } },
             }));
 
             body.Controls.Add(MakeSection("Generation & export", new[]
@@ -273,6 +277,20 @@ namespace ClarionDctAddin
         {
             Hide();
             using (var dlg = new DuplicateFieldsDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenCompareTables()
+        {
+            Hide();
+            using (var dlg = new CompareTablesDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenCompareDictionaries()
+        {
+            Hide();
+            using (var dlg = new CompareDictionariesDialog(dict)) dlg.ShowDialog(this);
             Show();
         }
     }

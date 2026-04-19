@@ -23,6 +23,10 @@ A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently ope
 - **Dead tables** — tables with no relations and no references elsewhere.
 - **Duplicate fields** — fields with identical label + type + size appearing on many tables — candidates for extraction.
 
+### Compare & diff
+- **Compare tables** — pick two tables in the current dict, diff their fields + keys side-by-side (Same / Differs / Only-A / Only-B).
+- **Compare dictionaries** — save a `*.tasker-snap` snapshot of the current dict, later load it and compare against the live dict (or a completely different dict). Tree view of Added / Removed / Changed tables with field-, key-, and relation-level drill-down. Exportable as Markdown.
+
 ### Generation & export
 - **SQL DDL export** — live preview window, 5 dialects (SQL Server, PostgreSQL, SQLite, MySQL, MariaDB). Whole dictionary or single table. Remembers the preferred dialect.
 - **Markdown documentation** — single-document reference (tables, fields, keys, relations) with optional TOC. Copy or save as `.md`.
@@ -101,6 +105,10 @@ User preferences (e.g. preferred SQL dialect) live in:
 | `HealthDashboardDialog.cs` | Stats / charts. |
 | `DeadTablesDialog.cs` | Tables with no relations. |
 | `DuplicateFieldsDialog.cs` | Fields appearing on multiple tables. |
+| `CompareTablesDialog.cs` | Side-by-side diff of two tables in one dict. |
+| `CompareDictionariesDialog.cs` | Live dict vs. `.tasker-snap` snapshot diff + Markdown export. |
+| `DictSnapshot.cs` | Capture + save/load of a dict's structural shape. |
+| `DictDiff.cs` | Pure diff of two `DictSnapshot`s. |
 | `SqlDdlDialog.cs` / `SqlDdlGenerator.cs` | DDL preview + 5-dialect generator. |
 | `MarkdownDialog.cs` / `MarkdownGenerator.cs` | Markdown preview + generator. |
 | `BatchCopyFieldsDialog.cs` | Batch field propagation. |
