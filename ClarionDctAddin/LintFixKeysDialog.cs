@@ -31,7 +31,7 @@ namespace ClarionDctAddin
         List<Row>    rows = new List<Row>();
         Dictionary<string, List<string>> otherOwners;   // ExternalName -> owners NOT in scope
 
-        enum ShowFilter  { All, BlankOnly, DuplicatesOnly }
+        enum ShowFilter  { All, BlankOnly, DuplicatesOnly, IllegalOnly }
         enum OwnerSource { TableName, Prefix }
         enum KeySource   { LabelOnly, FullName }
 
@@ -51,12 +51,14 @@ namespace ClarionDctAddin
         {
             public object Key;
             public string Table, Prefix, Name, KeyType, Components;
+            public string Driver;
             public string Unique, Primary;
             public string OrigExternalName;
             public string ExternalName;
             public string Issues;
             public bool   IsBlank;        // ExternalName empty after edits
             public bool   IsDuplicated;   // collides with another key's ExternalName
+            public bool   IsIllegal;      // contains bad chars / whitespace / over length limit
 
             public bool DirtyExternalName
             {
@@ -146,6 +148,7 @@ namespace ClarionDctAddin
             cbShow.Items.Add("All issues");
             cbShow.Items.Add("Blank ExternalName only");
             cbShow.Items.Add("Duplicated ExternalName only");
+            cbShow.Items.Add("Illegal characters / length only");
             cbShow.SelectedIndex = ClampIndex(Settings.FixKeysShow, cbShow.Items.Count);
             cbShow.SelectedIndexChanged += delegate
             {
@@ -352,6 +355,7 @@ namespace ClarionDctAddin
             {
                 if (filter == ShowFilter.BlankOnly      && !r.IsBlank)      continue;
                 if (filter == ShowFilter.DuplicatesOnly && !r.IsDuplicated) continue;
+                if (filter == ShowFilter.IllegalOnly    && !r.IsIllegal)    continue;
                 var idx = grid.Rows.Add(r.Table, r.Name, r.KeyType, r.Components, r.Unique, r.Primary, r.ExternalName, r.Issues);
                 grid.Rows[idx].Tag = r;
                 PaintRow(grid.Rows[idx], r);
@@ -394,10 +398,12 @@ namespace ClarionDctAddin
             int dirty = rows.Count(r => r.Dirty);
             int blank = rows.Count(r => r.IsBlank);
             int dup   = rows.Count(r => r.IsDuplicated);
+            int bad   = rows.Count(r => r.IsIllegal);
             int outstanding = rows.Count(r => !string.IsNullOrEmpty(r.Issues));
             lblSummary.Text = rows.Count + " key(s) flagged"
                 + "   ·   blank: " + blank
                 + "   ·   duplicated: " + dup
+                + "   ·   illegal: " + bad
                 + "   ·   " + dirty + " edited"
                 + "   ·   " + outstanding + " still have outstanding issues";
             btnApply.Enabled = dirty > 0;
@@ -469,6 +475,7 @@ namespace ClarionDctAddin
                         Key = k,
                         Table = tName,
                         Prefix = DictModel.AsString(DictModel.GetProp(t, "Prefix")) ?? "",
+                        Driver = DictModel.AsString(DictModel.GetProp(t, "FileDriverName")) ?? "",
                         Name = kName,
                         KeyType = DictModel.AsString(DictModel.GetProp(k, "KeyType")) ?? "Key",
                         Components = string.IsNullOrEmpty(sig) ? "" : sig.Replace(",", " + "),
@@ -523,6 +530,7 @@ namespace ClarionDctAddin
                 var issues = new List<string>();
                 r.IsBlank = string.IsNullOrWhiteSpace(r.ExternalName);
                 r.IsDuplicated = false;
+                r.IsIllegal = false;
 
                 if (r.IsBlank) issues.Add("no ExternalName");
                 if (string.IsNullOrEmpty(r.Components)) issues.Add("no components");
@@ -530,6 +538,16 @@ namespace ClarionDctAddin
                 if (!r.IsBlank)
                 {
                     var ext = r.ExternalName;
+
+                    // Illegal-character checks — mirror LintEngine.CheckExternalNameShape.
+                    if (ext.IndexOf(':') >= 0)         { issues.Add("contains ':'"); r.IsIllegal = true; }
+                    if (ContainsWhitespace(ext))       { issues.Add("contains whitespace"); r.IsIllegal = true; }
+                    if (ext.Length > 0 && char.IsDigit(ext[0])) { issues.Add("starts with digit"); r.IsIllegal = true; }
+                    if (!LooksLikeSafeSqlIdentifier(ext)) { issues.Add("unusual chars"); r.IsIllegal = true; }
+                    int limit = SqlIdentifierLengthLimit(r.Driver);
+                    if (ext.Length > limit)            { issues.Add("over " + limit + " chars"); r.IsIllegal = true; }
+
+                    // Cross-scope / in-scope duplicate check.
                     var others = new List<string>();
                     List<string> inScopeOwners;
                     if (inScope.TryGetValue(ext, out inScopeOwners) && inScopeOwners.Count > 1)
@@ -550,6 +568,34 @@ namespace ClarionDctAddin
 
                 r.Issues = string.Join("; ", issues.ToArray());
             }
+        }
+
+        static bool ContainsWhitespace(string s)
+        {
+            for (int i = 0; i < s.Length; i++) if (char.IsWhiteSpace(s[i])) return true;
+            return false;
+        }
+
+        static bool LooksLikeSafeSqlIdentifier(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                var c = s[i];
+                bool ok = char.IsLetterOrDigit(c) || c == '_' || c == '$' || c == '#' || c == '.';
+                if (!ok) return false;
+            }
+            return true;
+        }
+
+        static int SqlIdentifierLengthLimit(string driver)
+        {
+            var d = (driver ?? "").ToUpperInvariant();
+            if (d.Contains("POSTGRES")) return 63;
+            if (d.Contains("MYSQL") || d.Contains("MARIADB")) return 64;
+            if (d.Contains("MSSQL") || d.Contains("SQLSERVER")) return 128;
+            if (d.Contains("SQLITE")) return 128;
+            return 64;
         }
 
         static string Yn(string v)
