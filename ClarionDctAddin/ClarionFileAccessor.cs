@@ -105,39 +105,79 @@ namespace ClarionDctAddin
             byte[] record = new byte[Math.Max(1, recordSize)];
             r.Log.Add("record size: " + recordSize + " bytes");
 
-            // 5. Construct CFile. Try the 4-arg ctor first.
-            object cfile;
+            // 5. Construct CFile. Dump available ctors to the log first so if
+            //    we fall through every path, the user has something to paste back.
+            object cfile = null;
+            var claStringType = ResolveClaStringType(fileIo, r);
+            LogCtors(cfileType, "CFile", r);
+            if (claStringType != null) LogCtors(claStringType, "ClaString", r);
+
+            // 5a. Try default ctor + property sets first — this path doesn't need
+            // a ClaString and is therefore less fragile. Property setters on CFile
+            // usually accept plain strings (the wrapper is convenience, not required).
             try
             {
-                var claStringType = fileIo.GetType("Clarion.ClaString");
-                var fourArgCtor = cfileType.GetConstructor(new[]
+                var defCtor = cfileType.GetConstructor(Type.EmptyTypes);
+                if (defCtor != null)
                 {
-                    typeof(byte[]), claStringType, claStringType, claStringType
-                });
-                if (fourArgCtor != null)
-                {
-                    cfile = fourArgCtor.Invoke(new object[]
+                    cfile = defCtor.Invoke(null);
+                    r.Log.Add("ctor() default ok");
+                    bool drvOk  = TrySet(cfile, "Driver", driver, r);
+                    bool nameOk = TrySet(cfile, "Name",   path,   r)
+                               || TrySet(cfile, "FileName", path, r)
+                               || TrySet(cfile, "FullPathName", path, r);
+                    if (!drvOk || !nameOk)
                     {
-                        record,
-                        ToClaString(claStringType, driver),
-                        ToClaString(claStringType, path),
-                        ToClaString(claStringType, "")
-                    });
-                    r.Log.Add("ctor(byte[], driver, path, options) ok");
-                }
-                else
-                {
-                    // Fall back to default ctor + property sets.
-                    cfile = Activator.CreateInstance(cfileType);
-                    TrySet(cfile, "Driver", driver, r);
-                    TrySet(cfile, "Name",   path, r);
-                    r.Log.Add("ctor(): default ok");
+                        r.Log.Add("default-ctor path couldn't set Driver/Name — will try 4-arg");
+                        cfile = null;
+                    }
+                    else
+                    {
+                        // Some CFile flavours also want the buffer set explicitly.
+                        TrySet(cfile, "Record", record, r);
+                        TrySet(cfile, "Buffer", record, r);
+                    }
                 }
             }
             catch (Exception ex)
             {
+                r.Log.Add("default-ctor path failed: " + (ex.InnerException ?? ex).GetType().Name + " - " + (ex.InnerException ?? ex).Message);
+                cfile = null;
+            }
+
+            // 5b. Fall back to the 4-arg ctor with string-typed positional args.
+            // Modern reflection will coerce string -> ClaString through implicit
+            // converters if the type defines any.
+            if (cfile == null && claStringType != null)
+            {
+                try
+                {
+                    var fourArgCtor = cfileType.GetConstructor(new[] { typeof(byte[]), claStringType, claStringType, claStringType });
+                    if (fourArgCtor != null)
+                    {
+                        var drvWrap  = WrapClaString(claStringType, driver, r);
+                        var pathWrap = WrapClaString(claStringType, path,   r);
+                        var optWrap  = WrapClaString(claStringType, "",     r);
+                        r.Log.Add("4-arg args: drv=" + (drvWrap == null ? "null" : "ok")
+                                + ", path=" + (pathWrap == null ? "null" : "ok")
+                                + ", opt=" + (optWrap == null ? "null" : "ok"));
+                        if (drvWrap != null && pathWrap != null && optWrap != null)
+                        {
+                            cfile = fourArgCtor.Invoke(new object[] { record, drvWrap, pathWrap, optWrap });
+                            r.Log.Add("ctor(byte[], driver, path, options) ok");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    r.Log.Add("4-arg ctor failed: " + (ex.InnerException ?? ex).GetType().Name + " - " + (ex.InnerException ?? ex).Message);
+                }
+            }
+
+            if (cfile == null)
+            {
                 r.Ok = false;
-                r.Error = "Failed to construct CFile: " + (ex.InnerException ?? ex).Message;
+                r.Error = "Could not construct CFile via any known path — see log for the ctor list.";
                 return;
             }
 
@@ -420,35 +460,137 @@ namespace ClarionDctAddin
             return null;
         }
 
-        static object ToClaString(Type claStringType, string value)
+        static Type ResolveClaStringType(Assembly fileIo, ReadResult r)
         {
-            if (claStringType == null) return value; // let the runtime fall back to string ctor coercion
-            // Try constructors: (string), (byte[]) etc.
-            var ctorStr = claStringType.GetConstructor(new[] { typeof(string) });
-            if (ctorStr != null) return ctorStr.Invoke(new object[] { value ?? "" });
-            var ctorDefault = claStringType.GetConstructor(Type.EmptyTypes);
-            if (ctorDefault != null)
+            // First try in FileIO.dll, then in any other already-loaded SoftVelocity assembly.
+            var t = fileIo.GetType("Clarion.ClaString");
+            if (t != null) { r.Log.Add("ClaString: " + t.AssemblyQualifiedName); return t; }
+            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
             {
-                var inst = ctorDefault.Invoke(null);
-                // Try common setters.
-                TrySet(inst, "Value", value ?? "", null);
-                TrySet(inst, "Text",  value ?? "", null);
-                return inst;
+                try
+                {
+                    t = a.GetType("Clarion.ClaString");
+                    if (t != null) { r.Log.Add("ClaString (via " + a.GetName().Name + "): " + t.AssemblyQualifiedName); return t; }
+                }
+                catch { }
             }
-            return value;
+            r.Log.Add("Clarion.ClaString type not found in any loaded assembly.");
+            return null;
         }
 
-        static void TrySet(object target, string name, object value, ReadResult r)
+        static void LogCtors(Type t, string label, ReadResult r)
         {
-            if (target == null) return;
+            if (t == null) { r.Log.Add(label + ": <null>"); return; }
+            foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                var ps = c.GetParameters();
+                var sig = new StringBuilder();
+                for (int i = 0; i < ps.Length; i++)
+                {
+                    if (i > 0) sig.Append(", ");
+                    sig.Append(ps[i].ParameterType.Name);
+                }
+                r.Log.Add(label + " ctor(" + sig + ")");
+            }
+        }
+
+        static object WrapClaString(Type claStringType, string value, ReadResult r)
+        {
+            if (claStringType == null) return value;
+            value = value ?? "";
+
+            // 1. (string) ctor
+            var cs = claStringType.GetConstructor(new[] { typeof(string) });
+            if (cs != null)
+            {
+                try { var w = cs.Invoke(new object[] { value }); r.Log.Add("ClaString(\"" + Preview(value) + "\") ok via (string) ctor"); return w; }
+                catch (Exception ex) { r.Log.Add("ClaString(string) failed: " + (ex.InnerException ?? ex).Message); }
+            }
+
+            // 2. Static implicit operator op_Implicit(string)
+            var op = claStringType.GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
+            if (op != null)
+            {
+                try { var w = op.Invoke(null, new object[] { value }); r.Log.Add("ClaString via op_Implicit(string) ok"); return w; }
+                catch (Exception ex) { r.Log.Add("op_Implicit(string) failed: " + (ex.InnerException ?? ex).Message); }
+            }
+
+            // 3. (byte[]) ctor — Clarion commonly represents strings as char arrays
+            var cb = claStringType.GetConstructor(new[] { typeof(byte[]) });
+            if (cb != null)
+            {
+                try { var w = cb.Invoke(new object[] { Encoding.GetEncoding(1252).GetBytes(value) }); r.Log.Add("ClaString via (byte[]) ctor ok"); return w; }
+                catch (Exception ex) { r.Log.Add("ClaString(byte[]) failed: " + (ex.InnerException ?? ex).Message); }
+            }
+
+            // 4. (int size, string initial) or (int size) etc. — try anything with a (int) first.
+            var ci = claStringType.GetConstructor(new[] { typeof(int) });
+            if (ci != null)
+            {
+                try
+                {
+                    var w = ci.Invoke(new object[] { Math.Max(1, value.Length) });
+                    TrySet(w, "Value", value, r);
+                    TrySet(w, "Text",  value, r);
+                    r.Log.Add("ClaString via (int) ctor + Value/Text set ok");
+                    return w;
+                }
+                catch (Exception ex) { r.Log.Add("ClaString(int) failed: " + (ex.InnerException ?? ex).Message); }
+            }
+
+            // 5. Default ctor + property set
+            var cd = claStringType.GetConstructor(Type.EmptyTypes);
+            if (cd != null)
+            {
+                try
+                {
+                    var w = cd.Invoke(null);
+                    if (TrySet(w, "Value", value, r) || TrySet(w, "Text", value, r))
+                    {
+                        r.Log.Add("ClaString via default ctor + Value/Text set ok");
+                        return w;
+                    }
+                    r.Log.Add("ClaString default ctor ok but no Value/Text setter found");
+                }
+                catch (Exception ex) { r.Log.Add("ClaString default ctor failed: " + (ex.InnerException ?? ex).Message); }
+            }
+
+            r.Log.Add("WrapClaString: all strategies exhausted for \"" + Preview(value) + "\"");
+            return null;
+        }
+
+        static string Preview(string v)
+        {
+            if (v == null) return "<null>";
+            if (v.Length > 48) return v.Substring(0, 45) + "...";
+            return v;
+        }
+
+        static bool TrySet(object target, string name, object value, ReadResult r)
+        {
+            if (target == null) return false;
             try
             {
                 var p = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (p != null && p.CanWrite) { p.SetValue(target, value, null); if (r != null) r.Log.Add("set " + name + " ok"); return; }
+                if (p != null && p.CanWrite)
+                {
+                    p.SetValue(target, value, null);
+                    if (r != null) r.Log.Add("set " + target.GetType().Name + "." + name + " ok");
+                    return true;
+                }
                 var f = target.GetType().GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (f != null) { f.SetValue(target, value); if (r != null) r.Log.Add("set-field " + name + " ok"); return; }
+                if (f != null)
+                {
+                    f.SetValue(target, value);
+                    if (r != null) r.Log.Add("set-field " + target.GetType().Name + "." + name + " ok");
+                    return true;
+                }
             }
-            catch (Exception ex) { if (r != null) r.Log.Add("set " + name + " failed: " + ex.Message); }
+            catch (Exception ex)
+            {
+                if (r != null) r.Log.Add("set " + name + " failed: " + (ex.InnerException ?? ex).Message);
+            }
+            return false;
         }
 
         static MethodInfo FindMethod(Type t, string name, Type[] args)
