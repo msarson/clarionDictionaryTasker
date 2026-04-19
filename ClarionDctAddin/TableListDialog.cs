@@ -251,7 +251,7 @@ namespace ClarionDctAddin
                 var t = lv.SelectedItems[0].Tag;
                 var json = JsonExporter.TableJson(t);
                 var tableName = DictModel.AsString(DictModel.GetProp(t, "Name")) ?? "table";
-                SaveJson(tableName + ".json", json);
+                ShowJson("JSON export - table " + tableName, tableName + ".json", json);
             }
             else
             {
@@ -260,7 +260,8 @@ namespace ClarionDctAddin
                     DictModel.GetDictionaryName(dict),
                     DictModel.GetDictionaryFileName(dict),
                     selected);
-                SaveJson(DictModel.GetDictionaryName(dict) + "-selected.json", json);
+                ShowJson("JSON export - " + selected.Count + " selected tables",
+                    DictModel.GetDictionaryName(dict) + "-selected.json", json);
             }
         }
 
@@ -270,26 +271,14 @@ namespace ClarionDctAddin
                 DictModel.GetDictionaryName(dict),
                 DictModel.GetDictionaryFileName(dict),
                 tables);
-            SaveJson(DictModel.GetDictionaryName(dict) + ".json", json);
+            ShowJson("JSON export - " + DictModel.GetDictionaryName(dict),
+                DictModel.GetDictionaryName(dict) + ".json", json);
         }
 
-        void SaveJson(string suggestedName, string json)
+        void ShowJson(string title, string suggestedName, string json)
         {
-            using (var dlg = new SaveFileDialog
-            {
-                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                FileName = suggestedName,
-                InitialDirectory = GetInitialDir()
-            })
-            {
-                if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                File.WriteAllText(dlg.FileName, json);
-                MessageBox.Show(this,
-                    "Saved: " + dlg.FileName,
-                    "DCT Addin",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-            }
+            using (var dlg = new JsonPreviewDialog(title, json, suggestedName, GetInitialDir()))
+                dlg.ShowDialog(this);
         }
 
         string GetInitialDir()
