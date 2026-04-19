@@ -454,13 +454,78 @@
   <h2>JSON export</h2>
   <p>
     From the Tables tab you can export one selected table, a multi-selection, or the whole
-    dictionary to a <code>.json</code> file. The schema is hand-picked so the output is stable
-    and machine-parsable:
+    dictionary. The export opens a <strong>preview window</strong> (same shape as the SQL DDL and
+    Markdown dialogs) with a monospace viewer and Copy / Save-as / Close buttons — no file is
+    written until you explicitly choose one.
+  </p>
+  <p>
+    The preview has a <strong>view toolbar</strong> that reformats the same data on the fly. The
+    active button is bold and the stats line reports the current view's character/line count.
+  </p>
+
+  <h3>View toolbar</h3>
+
+  <h4>Text formats (row 1)</h4>
+  <table>
+    <thead><tr><th>Button</th><th>What it shows</th><th>Good for</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Pretty (2 sp)</strong></td><td>Default — 2-space indent.</td><td>Default reading / diffing.</td></tr>
+      <tr><td><strong>Pretty (4 sp)</strong></td><td>4-space indent.</td><td>Matches popular formatters / lint rules.</td></tr>
+      <tr><td><strong>Tabs</strong></td><td>Tab-indented.</td><td>Projects that prefer tabs in VCS.</td></tr>
+      <tr><td><strong>Minified</strong></td><td>Whitespace stripped between structural tokens; values in strings preserved verbatim.</td><td>Paste into an HTTP body, wire-format checks.</td></tr>
+      <tr><td><strong>Tree</strong></td><td>Hierarchical expandable TreeView — objects collapse to <code>{ N members }</code>, arrays to <code>[ N items ]</code>; scalars render inline with key/value colouring.</td><td>Big documents where you want to drill down one branch at a time.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Structured views (row 2)</h4>
+  <table>
+    <thead><tr><th>Button</th><th>What it shows</th><th>Good for</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Table</strong></td>
+        <td>Picks the biggest array-of-objects in the document and renders it as an
+            aligned-column table: union of member keys as columns, one row per array item,
+            cells clipped at 60 chars. Title line reports the chosen array's path plus
+            <code>rows × columns</code>.</td>
+        <td>Reviewing the <code>tables[]</code> list in a whole-dict export, or the
+            <code>fields[]</code> list in a single-table export.</td>
+      </tr>
+      <tr>
+        <td><strong>YAML</strong></td>
+        <td>YAML 1.2-ish rendering. Values that look like reserved scalars
+            (<code>true</code> / <code>null</code> / numbers) or contain control chars are
+            single-quoted so they round-trip unambiguously.</td>
+        <td>Readability — less syntactic noise than braces-and-quotes JSON.</td>
+      </tr>
+      <tr>
+        <td><strong>Path list</strong></td>
+        <td>Flatten to one line per leaf:
+            <code>tables[0].fields[3].type = "LONG"</code>. Non-identifier keys get quoted.</td>
+        <td>Grepping for a value, diffing two exports in plain text tools, or quickly
+            spotting what changed.</td>
+      </tr>
+      <tr>
+        <td><strong>Schema</strong></td>
+        <td>Values stripped — only structure + types. Uniform arrays-of-objects collapse to
+            <code>[ N × {shape} ]</code>; mixed-shape arrays label themselves
+            <code>mixed</code>.</td>
+        <td>Seeing what's in there at a glance without the value noise.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Output schema</h3>
+  <p>
+    The hand-picked schema is stable and machine-parsable. Tables get a curated scalar list
+    (name / prefix / driver / flags / …) plus arrays for Fields, Keys, Relations, Triggers,
+    Aliases. Fields go through a second hand-picked scalar list (type / size / picture / heading /
+    prompt / external name / booleans). Keys / Relations / Triggers / Aliases are auto-dumped
+    by reflection but with a cycle guard and depth / size caps.
   </p>
 <pre><code class="lang-json">{
   "dictionary": "apiTestdict",
   "fileName":   "C:\\ai\\clarionstuff\\settings.dct",
-  "generatedAt": "2026-04-17T14:30:00.000Z",
+  "generatedAt": "2026-04-19T14:30:00.000Z",
   "tableCount": 47,
   "tables": [
     {
@@ -469,7 +534,7 @@
       "driver": "MSSQL",
       "fileStatement": "FILE,DRIVER('MSSQL'),NAME('dbo.clientes'),CREATE",
       "fields": [
-        { "name": "ID", "dataType": "LONG", "size": 4, "picture": "@n-14", "isAutoNumber": true },
+        { "name": "ID",   "dataType": "LONG",   "size": 4,   "picture": "@n-14", "isAutoNumber": true },
         { "name": "NAME", "dataType": "STRING", "size": 100, "picture": "@s100" }
       ],
       "keys": [ /* ... */ ],
@@ -478,10 +543,34 @@
   ]
 }
 </code></pre>
+
+  <h3>Safety rails</h3>
   <p>
-    The JSON writer is dependency-free (no Newtonsoft), lives in <code>JsonExporter.cs</code>, and
-    uses a hand-picked schema for <code>DDFile</code> and <code>DDField</code> plus reflection-based
-    auto-dumping for <code>DDKey</code>, <code>DDRelation</code>, and <code>DDTrigger</code>.
+    The reflection-based auto-dumping (for keys / relations / triggers / aliases) has caused
+    IDE-level crashes on wide tables where a SoftVelocity property exposed a back-reference
+    collection that looped. The generator now has:
+  </p>
+  <ul>
+    <li><strong>Cycle guard</strong> — a reference-equality <code>HashSet&lt;object&gt;</code>
+        tracks visited instances for the whole run; repeat visits emit
+        <code>"&lt;cycle: TypeName&gt;"</code> and stop recursing.</li>
+    <li><strong>Depth cap</strong> — reflection recursion stops at depth 3.</li>
+    <li><strong>Size caps</strong> — the generator aborts after 200 000 nodes or ~50 MB of
+        text, writing a trailing <code>// NOTE: output truncated</code> comment.</li>
+    <li><strong>Per-collection cap</strong> — 10 000 items per enumerable. Defensive
+        try/catch around the enumerator itself in case a property throws mid-walk.</li>
+    <li><strong>UI catch</strong> — the Export Selected / Export All handlers wrap the call
+        in a try/catch; an <code>OutOfMemoryException</code> (or anything else) surfaces as a
+        modal error dialog instead of killing Clarion 12.</li>
+  </ul>
+
+  <h3>Under the hood</h3>
+  <p>
+    <code>JsonExporter.cs</code> emits the pretty-printed output; <code>JsonFormatter.cs</code>
+    re-formats between Pretty / Tabs / Minified as a string-aware state machine;
+    <code>JsonParser.cs</code> is the recursive-descent parser used by Tree and the four
+    structured views; <code>JsonViewTransforms.cs</code> hosts the Table / YAML / Path list /
+    Schema renderers. The whole stack is dependency-free — no Newtonsoft, no <code>System.Web</code>.
   </p>
 </article>
 
@@ -959,7 +1048,11 @@ R     &lt;name&gt;  &lt;related-table&gt;
       <tr><td><code>BatchCopyFieldsCommand.cs</code> / <code>BatchCopyDialog.cs</code> / <code>FieldCopier.cs</code></td><td>Batch copy fields.</td></tr>
       <tr><td><code>BatchCopyKeysCommand.cs</code> / <code>BatchCopyKeysDialog.cs</code> / <code>KeyCopier.cs</code></td><td>Batch copy keys with component re-mapping.</td></tr>
       <tr><td><code>BatchProgressDialog.cs</code></td><td>Modal progress dialog with per-item label and Cancel.</td></tr>
-      <tr><td><code>JsonExporter.cs</code></td><td>Dependency-free JSON writer with hand-picked schema.</td></tr>
+      <tr><td><code>JsonExporter.cs</code></td><td>Dependency-free JSON writer with hand-picked schema + cycle-guard and depth / size caps for the reflection-auto-dump path.</td></tr>
+      <tr><td><code>JsonPreviewDialog.cs</code></td><td>Preview window for JSON exports; switches between text styles, tree view, and four structured renderings.</td></tr>
+      <tr><td><code>JsonFormatter.cs</code></td><td>String-aware state machine that re-indents or minifies already-valid JSON without a full parse.</td></tr>
+      <tr><td><code>JsonParser.cs</code></td><td>Recursive-descent JSON parser feeding the tree view and the structured transforms.</td></tr>
+      <tr><td><code>JsonViewTransforms.cs</code></td><td>Table / YAML / Path list / Schema renderers on top of <code>JsonParser</code>.</td></tr>
       <tr><td><code>ToolsDialog.cs</code></td><td>Catalogue window — categorised grid of every dictionary tool. Bold = implemented.</td></tr>
       <tr><td><code>LintEngine.cs</code> / <code>LintReportDialog.cs</code></td><td>Structural lint findings + report dialog.</td></tr>
       <tr><td><code>PictureConsistencyDialog.cs</code> / <code>NamingConventionsDialog.cs</code></td><td>Style lints with configurable rules.</td></tr>
