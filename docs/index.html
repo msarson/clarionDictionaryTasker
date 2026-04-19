@@ -203,6 +203,7 @@
       <li><a href="#tools-visualize">Visualization</a></li>
       <li><a href="#tools-enterprise">Enterprise glue</a></li>
       <li><a href="#tools-snapshot">Snapshot format</a></li>
+      <li><a href="#persisted-prefs">Persisted preferences</a></li>
     </ul>
 
     <h3>Developer manual</h3>
@@ -660,6 +661,22 @@
         schema). Emits one Error finding per occurrence so both sides of every collision show
         up, each with the other owners listed in the Message. Single-table scans also surface
         cross-table collisions involving the scanned table.</li>
+    <li><strong>Illegal ExternalName shape</strong> — driver-aware checks on every table's
+        <code>FullPathName</code> and every field's / key's <code>ExternalName</code>:
+        <ul>
+          <li><code>:</code> anywhere → <strong>Error</strong>
+              (<code>illegal-external-name</code>; Clarion field-prefix leak, breaks MSSQL /
+              Postgres / MySQL / MariaDB).</li>
+          <li>Whitespace → <strong>Error</strong> (<code>illegal-external-name</code>).</li>
+          <li>Starts with a digit → <strong>Warning</strong>
+              (<code>illegal-external-name</code>).</li>
+          <li>Characters outside <code>[A-Za-z0-9_$#.]</code> → <strong>Warning</strong>
+              (<code>unusual-external-name-chars</code>).</li>
+          <li>Length over driver limit → <strong>Warning</strong>
+              (<code>long-external-name</code>). Limits: Postgres 63, MySQL / MariaDB 64,
+              MSSQL / SQLite 128.</li>
+        </ul>
+    </li>
     <li>Fields: no description, no picture, whitespace in label.</li>
     <li>Picture shape — <code>DATE</code> needs <code>@d*</code>, <code>TIME</code>
         <code>@t*</code>, numerics <code>@n*</code>, STRING forbids <code>@d</code>/<code>@t</code>/<code>@n</code>.
@@ -729,34 +746,65 @@
 
   <h3>Fix keys — editable grid</h3>
   <p>
-    Same shape as Fix fields but targets <code>DDKey</code>. Flags keys with an empty
-    <code>ExternalName</code>, zero components, or a component signature that duplicates
-    another key in the same table. Only the ExternalName column is editable inline; the rest
-    is context (table, key, type, components, Unique / Primary flags, issues).
+    Same shape as Fix fields but targets <code>DDKey</code>. Flags keys with:
   </p>
+  <ul>
+    <li>empty <code>ExternalName</code>,</li>
+    <li>zero components,</li>
+    <li>a component signature that duplicates another key in the same table,</li>
+    <li>an ExternalName that duplicates one elsewhere in the dict,</li>
+    <li>an ExternalName with <strong>illegal characters</strong> (the same driver-aware
+        rules the lint report uses — <code>:</code>, whitespace, leading digit, unusual
+        chars, over length limit).</li>
+  </ul>
+  <p>
+    Only the ExternalName column is editable inline; the rest is context (table, key, type,
+    components, Unique / Primary flags, issues). Summary bar reports
+    <em>blank: N · duplicated: M · illegal: K · E edited · R still have outstanding issues</em>.
+  </p>
+
+  <h4>Show filter</h4>
+  <p>
+    The <strong>Show:</strong> dropdown narrows the grid without changing the underlying
+    data — switching views is instant.
+  </p>
+  <ul>
+    <li><strong>All issues</strong> (default)</li>
+    <li><strong>Blank ExternalName only</strong></li>
+    <li><strong>Duplicated ExternalName only</strong></li>
+    <li><strong>Illegal characters / length only</strong></li>
+  </ul>
+
   <h4>Auto-fill for ExternalName</h4>
   <p>
-    Same toolbar pattern — strategy dropdown + <strong>Fill blanks</strong> /
-    <strong>Fill all (overwrite)</strong>. Eight naming styles, each generating the name
-    from the owning table and the key name:
+    Three dropdowns (all persisted across sessions) plus <strong>Fill blanks</strong> /
+    <strong>Fill all (overwrite)</strong>:
   </p>
   <table>
-    <thead><tr><th>Style</th><th>Example (<code>CLIENTES</code> + <code>guidkey</code>)</th></tr></thead>
+    <thead><tr><th>Dropdown</th><th>Options</th></tr></thead>
     <tbody>
-      <tr><td><code>UPPER_SNAKE</code></td><td><code>CLIENTES_GUIDKEY</code></td></tr>
-      <tr><td><code>lower_snake</code></td><td><code>clientes_guidkey</code></td></tr>
-      <tr><td><code>Camel_Snake</code></td><td><code>Clientes_guidkey</code></td></tr>
-      <tr><td><code>Pascal</code></td><td><code>ClientesGuidkey</code></td></tr>
-      <tr><td><code>camel</code></td><td><code>clientesGuidkey</code></td></tr>
-      <tr><td><code>idx_snake</code></td><td><code>idx_clientes_guidkey</code></td></tr>
-      <tr><td>Key only</td><td><code>guidkey</code></td></tr>
-      <tr><td>Table prefix</td><td><code>CLIENTES_guidkey</code> (cases preserved)</td></tr>
+      <tr><td><strong>Auto-fill style</strong></td>
+          <td>UPPER_SNAKE · lower_snake · Camel_Snake · Pascal · camel · idx_snake ·
+              Key only (no owner) · Owner prefix + key as-is</td></tr>
+      <tr><td><strong>Owner</strong></td>
+          <td>Table name · Prefix (strips trailing <code>:</code> on the Clarion prefix)</td></tr>
+      <tr><td><strong>Key</strong></td>
+          <td>Label only (after the <code>:</code>) · Full key name. Default is
+              <em>Label only</em> because SQL forbids <code>:</code> anyway.</td></tr>
     </tbody>
   </table>
   <p>
-    Pair with the <em>duplicate-external-name</em> lint rule: open Lint report → see the
-    Errors → click <strong>Fix keys...</strong> → pick <code>UPPER_SNAKE</code> →
-    <strong>Fill all (overwrite)</strong> → Apply → every index gets a unique
+    That's 8 × 2 × 2 = 32 combos. Common picks on a freshly-imported Clarion dict:
+    <code>UPPER_SNAKE + Table name + Label only</code> yields
+    <code>CLIENTES_GUIDKEY</code>; <code>UPPER_SNAKE + Prefix + Label only</code> yields
+    <code>CLI_GUIDKEY</code>. Fill all (overwrite) iterates the full row set — so rows
+    currently filtered out of the grid by the Show dropdown still get regenerated.
+  </p>
+  <p>
+    Typical workflow for a brand-new MSSQL target: Lint report → see
+    <code>illegal-external-name</code> / <code>duplicate-external-name</code> errors
+    → <strong>Fix keys...</strong> → pick <code>UPPER_SNAKE + Table name + Label only</code>
+    → <strong>Fill all (overwrite)</strong> → Apply → every index gets a unique, legal
     <code>TABLE_KEY</code> name in one shot.
   </p>
   <p>
@@ -1088,6 +1136,54 @@ R     &lt;name&gt;  &lt;related-table&gt;
     snapshots is <code>DictDiff.cs</code>; its
     <code>RenderMarkdown(before, after, diff)</code> is what both Compare dictionaries and
     Change-log generator feed into their Markdown export.
+  </p>
+</article>
+
+<article id="persisted-prefs">
+  <span class="kicker">Dictionary tools · appendix</span>
+  <h2>Persisted preferences</h2>
+  <p>
+    The add-in remembers the last value of every toolbar dropdown / checkbox / filter
+    it makes sense to remember, so the next time you open a dialog you don't have to
+    reconfigure it. All values live in a plain key=value text file:
+  </p>
+  <pre><code class="lang-text">%LOCALAPPDATA%\ClarionDctAddin\settings.txt</code></pre>
+  <p>
+    It's human-readable and editable — if you want to reset something, delete the line.
+    The file is recreated on the next save.
+  </p>
+
+  <table>
+    <thead><tr><th>Dialog</th><th>Preferences saved</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Browse tables — Tables tab</strong></td>
+          <td>Sort column index + ascending/descending.</td></tr>
+      <tr><td><strong>SQL DDL export</strong></td>
+          <td>Preferred dialect (MSSQL / Postgres / SQLite / MySQL / MariaDB).</td></tr>
+      <tr><td><strong>JSON preview</strong></td>
+          <td>Last view style (Pretty 2sp / 4sp / Tabs / Minified / Tree / Table / YAML / Paths / Schema).</td></tr>
+      <tr><td><strong>Model classes</strong></td>
+          <td>Language (C# / TypeScript), namespace text, Include-descriptions checkbox.
+              Explicit caller-passed language — e.g. the "Model classes (C#)" catalogue
+              entry — still wins over the stored value.</td></tr>
+      <tr><td><strong>Naming conventions</strong></td>
+          <td>All 5 rule checkboxes (tables UPPERCASE, prefix 2–4 chars, labels no
+              whitespace, labels no digit-start, key convention).</td></tr>
+      <tr><td><strong>Global search</strong></td>
+          <td>Regex toggle + the 6 kind filters (tables / fields / keys / relations /
+              triggers / descriptions).</td></tr>
+      <tr><td><strong>Fix fields</strong></td>
+          <td>Description auto-fill style dropdown.</td></tr>
+      <tr><td><strong>Fix keys</strong></td>
+          <td>Auto-fill style, Owner segment (Table name / Prefix), Key segment (Label
+              only / Full key name), Show filter (All / Blank / Duplicated /
+              Illegal).</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Changes persist on every edit — no "save preferences" button to remember. If a
+    stored value falls outside the current version's range (fewer dropdown items, for
+    example), it silently falls back to the default.
   </p>
 </article>
 
