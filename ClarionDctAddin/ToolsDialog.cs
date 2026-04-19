@@ -112,7 +112,9 @@ namespace ClarionDctAddin
             body.Controls.Add(MakeSection("Generation & export", new[]
             {
                 new ToolDef { Name = "SQL DDL export",
-                              Description = "Generate CREATE TABLE + indexes for SQL Server / Postgres / SQLite. Respects per-table driver." },
+                              Description = "Generate CREATE TABLE + indexes for SQL Server / Postgres / SQLite. Live preview with dialect switcher and save-to-file.",
+                              Implemented = true,
+                              OnClick = delegate { OpenSqlDdl(); } },
                 new ToolDef { Name = "Model classes (C#)",
                               Description = "Emit a C# class per table with properties typed from Clarion types. API-ready POCOs." },
                 new ToolDef { Name = "Model classes (TypeScript)",
@@ -228,6 +230,13 @@ namespace ClarionDctAddin
         {
             Hide();
             using (var dlg = new LintReportDialog(dict, null)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenSqlDdl()
+        {
+            Hide();
+            using (var dlg = new SqlDdlDialog(dict)) dlg.ShowDialog(this);
             Show();
         }
     }
