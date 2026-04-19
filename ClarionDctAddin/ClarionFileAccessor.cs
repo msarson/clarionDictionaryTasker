@@ -111,6 +111,14 @@ namespace ClarionDctAddin
             }
             r.Log.Add("using concrete type: " + cfileType.FullName);
 
+            // Deeper diagnostics: static methods on the base CFile might expose a
+            // factory, and any type anywhere named *Topspeed* / *TPS* is worth
+            // inspecting.
+            LogStaticMethods(cfileBaseType, "CFile", r);
+            FindByKeyword("TOPSPEED", r);
+            FindByKeyword("TPS",      r);
+            FindByKeyword("TopScan",  r);
+
             // 4. Compute a record buffer sized to the sum of DDField sizes. This
             //    is our best-effort layout — native Clarion carries its own
             //    internal padding which we don't model. If reading the buffer
@@ -546,6 +554,45 @@ namespace ClarionDctAddin
             }
             r.Log.Add("Clarion.ClaString type not found in any loaded assembly.");
             return null;
+        }
+
+        static void LogStaticMethods(Type t, string label, ReadResult r)
+        {
+            if (t == null) { r.Log.Add(label + ": <null>"); return; }
+            var sm = t.GetMethods(BindingFlags.Public | BindingFlags.Static);
+            r.Log.Add(label + " static method count: " + sm.Length);
+            foreach (var m in sm)
+            {
+                if (m.DeclaringType != t) continue; // skip inherited from Object
+                var ps = m.GetParameters();
+                var sb = new StringBuilder();
+                for (int i = 0; i < ps.Length; i++) { if (i > 0) sb.Append(", "); sb.Append(ps[i].ParameterType.Name); }
+                r.Log.Add(label + " static: " + m.ReturnType.Name + " " + m.Name + "(" + sb + ")");
+            }
+        }
+
+        static void FindByKeyword(string needle, ReadResult r)
+        {
+            var upper = needle.ToUpperInvariant();
+            int found = 0;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type[] types;
+                try { types = asm.GetTypes(); }
+                catch (ReflectionTypeLoadException ex) { types = ex.Types; }
+                catch { continue; }
+                if (types == null) continue;
+                foreach (var t in types)
+                {
+                    if (t == null || t.Name == null) continue;
+                    if (t.Name.ToUpperInvariant().IndexOf(upper, StringComparison.Ordinal) < 0) continue;
+                    r.Log.Add("keyword '" + needle + "' -> " + t.FullName
+                        + "  (" + (t.IsAbstract ? "abstract, " : "") + (t.IsInterface ? "interface, " : "") + "assembly=" + asm.GetName().Name + ")");
+                    found++;
+                    if (found > 40) { r.Log.Add("keyword '" + needle + "': truncated at 40 hits"); return; }
+                }
+            }
+            if (found == 0) r.Log.Add("keyword '" + needle + "': no hits");
         }
 
         static void LogCtors(Type t, string label, ReadResult r)
