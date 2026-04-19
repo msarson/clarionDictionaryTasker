@@ -191,6 +191,20 @@
       <li><a href="#json">JSON export</a></li>
     </ul>
 
+    <h3>Dictionary tools</h3>
+    <ul>
+      <li><a href="#tools-overview">Tools catalogue</a></li>
+      <li><a href="#tools-lint">Validation &amp; lint</a></li>
+      <li><a href="#tools-analysis">Analysis &amp; stats</a></li>
+      <li><a href="#tools-search">Search &amp; navigation</a></li>
+      <li><a href="#tools-compare">Compare &amp; diff</a></li>
+      <li><a href="#tools-export">Generation &amp; export</a></li>
+      <li><a href="#tools-refactor">Refactoring (mutation)</a></li>
+      <li><a href="#tools-visualize">Visualization</a></li>
+      <li><a href="#tools-enterprise">Enterprise glue</a></li>
+      <li><a href="#tools-snapshot">Snapshot format</a></li>
+    </ul>
+
     <h3>Developer manual</h3>
     <ul>
       <li><a href="#arch">Architecture</a></li>
@@ -221,10 +235,12 @@
   <h2>What Dictionary Tasker is</h2>
   <p>
     Dictionary Tasker is a <strong>Clarion 12 IDE add-in</strong> that inspects the dictionary you
-    currently have open in the editor and lets you do three things SoftVelocity's shipped editor
-    does not: <strong>browse the dictionary in structured views</strong>, <strong>batch-copy fields
-    across many tables at once</strong>, and <strong>batch-copy keys across tables</strong> with
-    automatic component re-wiring.
+    currently have open in the editor. It started out doing three things SoftVelocity's shipped
+    editor does not — <strong>browse the dictionary in structured views</strong>,
+    <strong>batch-copy fields across many tables at once</strong>, and
+    <strong>batch-copy keys across tables</strong> with automatic component re-wiring — and has
+    since grown a <strong>tools catalogue</strong> covering lint, analysis, search, comparison,
+    code generation, refactoring, visualization, and git integration.
   </p>
   <p>
     It does not parse the <code>.DCT</code> binary on disk. It hooks into the live dictionary
@@ -237,6 +253,14 @@
     <code>DeletedTimeStamp</code> audit fields, plus a matching unique key on <code>guid</code>,
     without clicking through each table one at a time.
   </div>
+  <p>
+    Beyond the three original features, the add-in has grown a <strong>tools catalogue</strong>
+    — a grid of 20+ specialised tools spanning lint / validation, analysis, search, comparison,
+    code generation, refactoring, and enterprise glue. Every implemented tool is shown in
+    <strong>bold</strong> in the catalogue window; tools still marked
+    <em>(planned)</em> would be placeholders, but as of this version every catalogue entry is
+    live. See the <a href="#tools-overview">Dictionary tools</a> section below.
+  </p>
 </article>
 
 <article id="install">
@@ -278,6 +302,7 @@
       <tr><td><strong>Browse tables</strong></td><td>Tabbed explorer: flat table list, hierarchical tree, relations diagram.</td></tr>
       <tr><td><strong>Batch copy fields</strong></td><td>Pick source table + fields + target tables, preview, apply.</td></tr>
       <tr><td><strong>Batch copy keys</strong></td><td>Same flow, for keys — with automatic component re-mapping by field label.</td></tr>
+      <tr><td><strong>More tools...</strong></td><td>Opens the <a href="#tools-overview">tools catalogue</a> — every planned / implemented dictionary tool grouped by category.</td></tr>
     </tbody>
   </table>
 </article>
@@ -460,6 +485,376 @@
   </p>
 </article>
 
+<!-- ====================== DICTIONARY TOOLS ====================== -->
+
+<article id="tools-overview">
+  <span class="kicker">Dictionary tools · overview</span>
+  <h2>Tools catalogue</h2>
+  <p>
+    The tools catalogue (<strong>More tools...</strong> tile on the launcher) is a grid of every
+    planned and implemented dictionary tool, grouped by category. Each tool opens in its own
+    dialog. Tools are labelled <strong>bold</strong> when implemented and dim + <em>(planned)</em>
+    when they're placeholders — as of this release every entry is implemented.
+  </p>
+  <table>
+    <thead><tr><th>Category</th><th>Tools</th></tr></thead>
+    <tbody>
+      <tr><td><a href="#tools-lint">Validation &amp; lint</a></td><td>Lint report, Picture consistency, Naming conventions</td></tr>
+      <tr><td><a href="#tools-analysis">Analysis &amp; stats</a></td><td>Health dashboard, Dead tables, Duplicate fields</td></tr>
+      <tr><td><a href="#tools-search">Search &amp; navigation</a></td><td>Global search, Where used, Path finder</td></tr>
+      <tr><td><a href="#tools-compare">Compare &amp; diff</a></td><td>Compare tables, Compare dictionaries, Change-log generator</td></tr>
+      <tr><td><a href="#tools-export">Generation &amp; export</a></td><td>SQL DDL, Model classes (C# / TS), Markdown documentation</td></tr>
+      <tr><td><a href="#tools-refactor">Refactoring (mutation)</a></td><td>Safe rename field, Batch rename (regex), Batch retype fields, Standard audit pack</td></tr>
+      <tr><td><a href="#tools-visualize">Visualization</a></td><td>Export relations map (SVG)</td></tr>
+      <tr><td><a href="#tools-enterprise">Enterprise glue</a></td><td>Git commit hook</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <strong>Right-click shortcuts:</strong> the Tables list, Tree view, and Relations diagram
+    all have right-click context menus that jump to the most common per-table tools
+    (<em>Show fields</em>, <em>Export SQL DDL</em>, <em>Markdown documentation</em>). No need to
+    open the catalogue for a single table.
+  </div>
+</article>
+
+<article id="tools-lint">
+  <span class="kicker">Dictionary tools · category 1</span>
+  <h2>Validation &amp; lint</h2>
+  <p>Read-only scanners that report structural or stylistic issues. None of these mutate the dictionary.</p>
+
+  <h3>Lint report</h3>
+  <p>
+    Full-dictionary scan covering: empty tables, tables with no keys, tables with no primary key,
+    tables participating in zero relations, duplicate keys (same components), and orphaned
+    relations. Findings grouped by severity (Error / Warning / Info) with a filter box for
+    quick narrowing. Also available as a per-table scan via right-click → <em>Lint this table</em>.
+  </p>
+
+  <h3>Picture consistency</h3>
+  <p>
+    Flags fields whose <code>ScreenPicture</code> doesn't match the category of their
+    <code>DataType</code>:
+  </p>
+  <ul>
+    <li><code>DATE</code> without <code>@d*</code> → warning.</li>
+    <li><code>TIME</code> without <code>@t*</code> → warning.</li>
+    <li><code>DECIMAL</code> / <code>REAL</code> without <code>@n</code> → warning;
+        money-ish labels (<code>amount</code>, <code>precio</code>, …) without <code>@n$*.*</code> → info.</li>
+    <li><code>STRING</code> / <code>CSTRING</code> / <code>PSTRING</code> with a
+        date/time/numeric picture → error.</li>
+    <li><strong>Cross-table consistency</strong>: when the same field label appears on many
+        tables with divergent <code>(type, picture)</code> combos → warning.</li>
+  </ul>
+
+  <h3>Naming conventions</h3>
+  <p>
+    Configurable rules with checkboxes — the scan re-runs whenever you toggle a rule:
+  </p>
+  <ul>
+    <li>Tables UPPERCASE.</li>
+    <li>Prefixes 2–4 uppercase characters.</li>
+    <li>Field labels contain no whitespace.</li>
+    <li>Field labels do not start with a digit.</li>
+    <li>Key names include a convention marker (<code>:PK</code>, <code>:BY</code>, or
+        <code>KEY</code>).</li>
+  </ul>
+  <p>Each violation is shown alongside a suggested fix (e.g. the whitespace rule emits
+     <code>oldLabel → old_Label</code>).</p>
+</article>
+
+<article id="tools-analysis">
+  <span class="kicker">Dictionary tools · category 2</span>
+  <h2>Analysis &amp; stats</h2>
+
+  <h3>Health dashboard</h3>
+  <p>Four-panel read-only summary of the dictionary:</p>
+  <ul>
+    <li>Top bar: totals — tables, fields, keys, relations, average fields per table.</li>
+    <li>Top-left: top-10 largest tables by field count (<code>ListView</code>).</li>
+    <li>Top-right: driver distribution bar chart (MSSQL vs TopSpeed vs …).</li>
+    <li>Bottom: histogram of relations-per-table bucketed <code>0 / 1 / 2 / 3 / 4 / 5 / 6-9 / 10+</code>.</li>
+  </ul>
+
+  <h3>Dead tables</h3>
+  <p>
+    Lists tables with zero relations and (optionally) zero references from any other table's keys
+    / relations / triggers. Good candidates for deletion. Read-only — just the report.
+  </p>
+
+  <h3>Duplicate fields</h3>
+  <p>
+    Groups every field by the triple <code>(label, type, size)</code> and shows every group with
+    two or more instances. Each row: label, type, size, count, comma-separated list of tables.
+    Useful for spotting candidates for extraction into a shared audit-field group.
+  </p>
+</article>
+
+<article id="tools-search">
+  <span class="kicker">Dictionary tools · category 3</span>
+  <h2>Search &amp; navigation</h2>
+
+  <h3>Global search</h3>
+  <p>
+    Debounced full-dictionary search. Type a term; matches appear in a <code>ListView</code> with
+    Kind / Table / Item / Context columns. Tick which kinds to search
+    (<em>Tables / Fields / Keys / Relations / Triggers / Descriptions</em>) and whether to treat
+    the term as <strong>regex</strong> or plain substring.
+  </p>
+  <p>Descriptions include table / field <code>Description</code>, <code>Prompt</code>,
+     <code>Heading</code>, and trigger bodies.</p>
+
+  <h3>Where used</h3>
+  <p>
+    Pick a table + a field. The tool scans every table's keys, relations, and trigger bodies
+    for references to that field:
+  </p>
+  <ul>
+    <li><strong>Key components</strong> on the home table (match via field-object reference).</li>
+    <li><strong>Relation components</strong> anywhere in the dict that point at the field.</li>
+    <li><strong>Trigger bodies</strong> that mention the field by <code>LABEL</code> or
+        <code>PREFIX:LABEL</code> with a word-boundary check to avoid partial matches inside
+        other identifiers.</li>
+  </ul>
+
+  <h3>Path finder</h3>
+  <p>
+    Answers the question <em>"how is <code>CLIENTES</code> related to <code>INVOICES</code>?"</em>
+    Picks two tables; runs breadth-first search on the undirected relation graph; shows every hop
+    as <code>TABLE_A --(relation_name)--&gt; TABLE_B</code>. "No relation path" is a valid answer
+    — the two tables are in disconnected components.
+  </p>
+</article>
+
+<article id="tools-compare">
+  <span class="kicker">Dictionary tools · category 4</span>
+  <h2>Compare &amp; diff</h2>
+
+  <h3>Compare tables</h3>
+  <p>
+    Pick two tables from the same dictionary (typical use:
+    <code>CLIENTES</code> vs <code>CLIENTES_ARCHIVO</code>). A split <code>ListView</code>
+    shows fields on top, keys on bottom, each row classified
+    <em>Same / Differs / Only&#8209;A / Only&#8209;B</em> and colour-coded. The summary line at
+    the top aggregates the counts.
+  </p>
+
+  <h3>Compare dictionaries</h3>
+  <p>
+    Clarion 12 only holds <em>one</em> <code>.DCT</code> open at a time, so the workflow is
+    snapshot-based:
+  </p>
+  <ol>
+    <li>Click <strong>Save current as snapshot...</strong> — writes a small
+        <code>*.tasker-snap</code> text file.</li>
+    <li>Modify the dict (or open a different <code>.DCT</code> in Clarion).</li>
+    <li>Click <strong>Load snapshot &amp; compare...</strong> — a tree shows
+        <em>Added / Removed / Changed</em> tables with field-, key-, and relation-level
+        drill-down.</li>
+    <li><strong>Export diff as Markdown...</strong> emits the whole diff as a shareable
+        document.</li>
+  </ol>
+  <p>The snapshot format is documented <a href="#tools-snapshot">below</a>.</p>
+
+  <h3>Change-log generator</h3>
+  <p>
+    Variant of Compare dictionaries where <em>both</em> sides come from disk snapshots. Pick an
+    old <code>.tasker-snap</code> and a new one; the dialog renders the diff as Markdown
+    suitable for a release note or a PR description. There's also a one-click
+    <strong>Save current dict as snapshot</strong> button so you can build up a series of
+    save-points over time.
+  </p>
+</article>
+
+<article id="tools-export">
+  <span class="kicker">Dictionary tools · category 5</span>
+  <h2>Generation &amp; export</h2>
+
+  <h3>SQL DDL export</h3>
+  <p>
+    Live-preview dialog that emits <code>CREATE TABLE</code> + index statements in five dialects:
+    <strong>SQL Server</strong>, <strong>PostgreSQL</strong>, <strong>SQLite</strong>,
+    <strong>MySQL</strong>, and <strong>MariaDB</strong>. The preview textbox re-renders
+    instantly on dialect change. Save as <code>.sql</code> or copy to clipboard. The chosen
+    dialect persists across launches via <code>%LOCALAPPDATA%\ClarionDctAddin\settings.txt</code>.
+  </p>
+  <p>
+    Also exposed as <strong>right-click → Export SQL DDL</strong> on the Tables list / Tree /
+    Relations diagram to export a single table.
+  </p>
+
+  <h3>Model classes (C# and TypeScript)</h3>
+  <p>
+    Unified preview dialog that emits one class / interface per table. The language dropdown
+    switches between:
+  </p>
+  <ul>
+    <li><strong>C#</strong> — <code>public class</code> POCOs with
+        <code>&lt;summary&gt;</code> doc comments, PascalCase property names, types mapped from
+        Clarion's <code>DataType</code> strings (<code>STRING → string</code>,
+        <code>LONG → int</code>, <code>DATE → DateTime</code>, <code>DECIMAL → decimal</code>,
+        etc.). Configurable namespace.</li>
+    <li><strong>TypeScript</strong> — <code>export interface</code> with JSDoc, camelCase
+        property names, numeric types collapsed to <code>number</code>, dates rendered as
+        <code>string</code> (ISO).</li>
+  </ul>
+  <p>Copy to clipboard or save as <code>.cs</code> / <code>.ts</code>.</p>
+
+  <h3>Markdown documentation</h3>
+  <p>
+    Single-document reference for the whole dictionary: one <code>## Heading</code> per table,
+    attribute table (Prefix / Driver / Full path / counts), then Fields / Keys / Relations sub-tables.
+    Toggle boxes control whether each of those sections is included and whether a TOC is emitted.
+    Save as <code>.md</code> or copy. Also exposed per-table via right-click.
+  </p>
+</article>
+
+<article id="tools-refactor">
+  <span class="kicker">Dictionary tools · category 6</span>
+  <h2>Refactoring (mutation)</h2>
+  <div class="callout warn">
+    <strong>Every tool in this section mutates the open dictionary.</strong> A timestamped
+    <code>.tasker-bak-&lt;yyyymmdd-hhmmss&gt;</code> copy of the <code>.DCT</code> is written
+    before any change; if the backup fails the batch aborts. The shared reflection plumbing
+    lives in <code>FieldMutator.cs</code>.
+  </div>
+
+  <h3>Safe rename field</h3>
+  <p>
+    Rename one field's label across all downstream references.
+  </p>
+  <ul>
+    <li><strong>Keys and relations update automatically.</strong> They hold references to the
+        field <em>object</em>, not the label string — setting the new label on the field
+        instance is enough.</li>
+    <li><strong>Trigger bodies are patched by text replace</strong> (optional). The regex
+        <code>\b(PREFIX:LABEL|LABEL)\b</code> catches both the prefixed and bare forms, with
+        word-boundary anchors so partial substrings inside other identifiers are not touched.
+        Uncheck the option if you'd rather update triggers manually.</li>
+  </ul>
+  <p>The preview lists every affected row (field itself, each key / relation reference, each
+     trigger body occurrence) before you confirm.</p>
+
+  <h3>Batch rename (regex)</h3>
+  <p>
+    Regex find/replace across selected text properties of every field in the dict, optionally
+    scoped by a table-name regex. Checkboxes pick which properties to touch:
+    <em>Label / Description / Heading / Prompt</em>. The replacement supports standard
+    <code>$1</code> backreferences. Preview the full plan before applying.
+  </p>
+
+  <h3>Batch retype fields</h3>
+  <p>
+    Pattern-match field labels with a regex, then set a new <code>DataType</code>,
+    <code>FieldSize</code>, and / or <code>ScreenPicture</code>. Any of the three target values
+    can be blank, meaning "preserve the current value". Preview lists
+    <code>before → after</code> per affected field.
+  </p>
+
+  <h3>Standard audit pack</h3>
+  <p>
+    Canonical propagation of the audit field pack
+    (<code>Guid</code> + <code>CreatedOn</code> + <code>CreatedBy</code> +
+    <code>ModifiedOn</code> + <code>ModifiedBy</code> + <code>DeletedOn</code>) onto every
+    selected target table.
+  </p>
+  <ol>
+    <li>The dialog picks a <strong>template table</strong> that already has those fields
+        defined — it auto-suggests the table with the most preset labels matched. If no
+        template exists, create one once (e.g. <code>_TEMPLATE_AUDIT</code>) with the fields
+        configured the way you want and reuse it forever.</li>
+    <li>The left list auto-checks every preset label found on the template, showing the
+        matched <code>(type, size, picture)</code>. Missing labels are shown as
+        "not found on template" so you can add them to the template and refresh.</li>
+    <li>Tick target tables in the second list (All / None helpers provided).</li>
+    <li>Pick <strong>Skip existing</strong> or <strong>Abort batch</strong> conflict mode.</li>
+    <li><strong>Preview &amp; apply...</strong> runs the plan through the shared
+        <code>FieldCopier.Apply</code> — the same mutation code Batch copy fields uses — with
+        backup, progress dialog, and mark-dirty included.</li>
+    <li><strong>Save recipe (.md)</strong> emits a Markdown document listing the fields and
+        target tables — useful for a PR description even if you don't apply live.</li>
+  </ol>
+</article>
+
+<article id="tools-visualize">
+  <span class="kicker">Dictionary tools · category 7</span>
+  <h2>Visualization</h2>
+
+  <h3>Export relations map (SVG)</h3>
+  <p>
+    Standalone SVG export of the relation graph. Unlike the interactive Relations tab, the
+    SVG writer uses its own <strong>grid layout</strong> (sorted by degree, optionally hiding
+    isolated tables, configurable column count). The output is a self-contained XML file with
+    inlined styles — no external renderer or font dependency, viewable in any browser or
+    editor and embeddable in GitHub READMEs.
+  </p>
+  <p>
+    Each table is rendered as a rounded rect with its name and degree count; relations are
+    arrowed lines between rects. Save as <code>.svg</code> or copy the raw XML to the
+    clipboard.
+  </p>
+</article>
+
+<article id="tools-enterprise">
+  <span class="kicker">Dictionary tools · category 8</span>
+  <h2>Enterprise glue</h2>
+
+  <h3>Git commit hook</h3>
+  <p>
+    Manual git commit for the <code>.DCT</code> file. The dialog:
+  </p>
+  <ul>
+    <li>Walks up from the dict's folder looking for a <code>.git</code> directory; reports the
+        repo root it found (or "not a git working tree").</li>
+    <li>Runs <code>git status --short -- &lt;dctPath&gt;</code> to show whether the dict is
+        staged, modified, clean, or untracked.</li>
+    <li>Pre-seeds a commit message (dict name, timestamp, table count, file name) that you can
+        edit.</li>
+    <li><strong>Commit</strong> runs <code>git add &lt;dctPath&gt;</code> then
+        <code>git commit -F &lt;tempfile&gt;</code>; <strong>Commit &amp; push</strong> also
+        runs <code>git push</code>. All git output is echoed into a panel below the message.</li>
+  </ul>
+  <div class="callout">
+    <strong>Why manual, not auto-on-save?</strong> Reliably hooking Clarion 12's save event
+    across point releases is fragile, and silent auto-commits are a footgun. An explicit
+    <em>Commit now</em> button is safer and more transparent — you can still wire it to a
+    keyboard shortcut or an external scheduler if you want automation.
+  </div>
+</article>
+
+<article id="tools-snapshot">
+  <span class="kicker">Dictionary tools · appendix</span>
+  <h2>Snapshot format (<code>*.tasker-snap</code>)</h2>
+  <p>
+    The Compare dictionaries and Change-log generator tools read and write a small
+    tab-delimited text format optimised for simplicity and diffability. It captures the
+    structural shape of the dictionary — tables, fields, keys, relations — but not data,
+    triggers' bodies, or editor-specific metadata.
+  </p>
+
+  <h4>Line format</h4>
+  <p>First column is a section tag; remaining columns are the record fields, tab-separated.
+     Embedded tabs, newlines, and backslashes are escaped
+     (<code>\\</code>, <code>\t</code>, <code>\n</code>, <code>\r</code>).</p>
+<pre><code class="lang-text">SNAP  &lt;ver&gt;  &lt;dict-name&gt;     &lt;file-name&gt;  &lt;captured-utc-iso&gt;
+T     &lt;name&gt;  &lt;prefix&gt;   &lt;driver&gt;    &lt;description&gt;
+F     &lt;label&gt; &lt;type&gt;     &lt;size&gt;      &lt;picture&gt;     &lt;description&gt;
+K     &lt;name&gt;  &lt;type&gt;     &lt;unique0/1&gt; &lt;primary0/1&gt; &lt;comma,sep,components&gt;
+R     &lt;name&gt;  &lt;related-table&gt;
+</code></pre>
+  <p>
+    <code>T</code> opens a new table block; subsequent <code>F</code> / <code>K</code> /
+    <code>R</code> lines belong to it until the next <code>T</code>. The format is deliberately
+    line-oriented so it diffs cleanly in git and stays readable to a human without a special
+    viewer.
+  </p>
+  <p>
+    Implementation lives in <code>DictSnapshot.cs</code>. The diff engine that compares two
+    snapshots is <code>DictDiff.cs</code>; its
+    <code>RenderMarkdown(before, after, diff)</code> is what both Compare dictionaries and
+    Change-log generator feed into their Markdown export.
+  </p>
+</article>
+
 <!-- ====================== DEVELOPER MANUAL ====================== -->
 
 <article id="arch">
@@ -565,6 +960,23 @@
       <tr><td><code>BatchCopyKeysCommand.cs</code> / <code>BatchCopyKeysDialog.cs</code> / <code>KeyCopier.cs</code></td><td>Batch copy keys with component re-mapping.</td></tr>
       <tr><td><code>BatchProgressDialog.cs</code></td><td>Modal progress dialog with per-item label and Cancel.</td></tr>
       <tr><td><code>JsonExporter.cs</code></td><td>Dependency-free JSON writer with hand-picked schema.</td></tr>
+      <tr><td><code>ToolsDialog.cs</code></td><td>Catalogue window — categorised grid of every dictionary tool. Bold = implemented.</td></tr>
+      <tr><td><code>LintEngine.cs</code> / <code>LintReportDialog.cs</code></td><td>Structural lint findings + report dialog.</td></tr>
+      <tr><td><code>PictureConsistencyDialog.cs</code> / <code>NamingConventionsDialog.cs</code></td><td>Style lints with configurable rules.</td></tr>
+      <tr><td><code>HealthDashboardDialog.cs</code> / <code>DeadTablesDialog.cs</code> / <code>DuplicateFieldsDialog.cs</code></td><td>Analysis dialogs (stats, dead tables, duplicate fields).</td></tr>
+      <tr><td><code>GlobalSearchDialog.cs</code> / <code>WhereUsedDialog.cs</code> / <code>PathFinderDialog.cs</code></td><td>Search + navigation across the dict.</td></tr>
+      <tr><td><code>CompareTablesDialog.cs</code> / <code>CompareDictionariesDialog.cs</code> / <code>ChangeLogDialog.cs</code></td><td>Diff dialogs (in-dict, live-vs-snapshot, snapshot-vs-snapshot).</td></tr>
+      <tr><td><code>DictSnapshot.cs</code> / <code>DictDiff.cs</code></td><td>Capture + save/load of the tab-delimited <code>*.tasker-snap</code> format and the pure diff engine it feeds.</td></tr>
+      <tr><td><code>SqlDdlGenerator.cs</code> / <code>SqlDdlDialog.cs</code></td><td>5-dialect DDL generator + live-preview dialog. Remembers preferred dialect via <code>Settings</code>.</td></tr>
+      <tr><td><code>ModelClassesGenerator.cs</code> / <code>ModelClassesDialog.cs</code></td><td>C# + TypeScript emitters with PascalCase / camelCase name mapping.</td></tr>
+      <tr><td><code>MarkdownGenerator.cs</code> / <code>MarkdownDialog.cs</code></td><td>Full-dict or single-table Markdown reference.</td></tr>
+      <tr><td><code>FieldMutator.cs</code></td><td>Shared helper for in-place field property edits (rename, retype, description tweaks) — sets backing fields + <code>itemHasChanged</code> / <code>stored</code> / <code>Touched</code>, then marks view dirty.</td></tr>
+      <tr><td><code>SafeRenameFieldDialog.cs</code> / <code>BatchRenameDialog.cs</code> / <code>BatchRetypeDialog.cs</code></td><td>Refactor tools built on <code>FieldMutator</code>.</td></tr>
+      <tr><td><code>StandardAuditPackDialog.cs</code></td><td>Audit-field propagator; runs through <code>FieldCopier.Apply</code>.</td></tr>
+      <tr><td><code>RelationsMapExportDialog.cs</code></td><td>Standalone SVG export with its own grid layout.</td></tr>
+      <tr><td><code>GitCommitDialog.cs</code></td><td>Manual git commit / push of the <code>.DCT</code>, shelling to the system <code>git</code> executable.</td></tr>
+      <tr><td><code>Settings.cs</code></td><td>Tiny key=value settings file in <code>%LOCALAPPDATA%</code>.</td></tr>
+      <tr><td><code>DictionaryOpenCondition.cs</code></td><td><code>IConditionEvaluator</code> — enables the toolbar button only when a dict is open.</td></tr>
       <tr><td><code>EmbeddedAssets.cs</code></td><td>Loads embedded <code>.ico</code> and <code>.png</code> resources.</td></tr>
       <tr><td><code>StartupCommand.cs</code></td><td>Runs at <code>/Workspace/Autostart</code>. Swaps the toolbar renderer to paint the custom icon.</td></tr>
       <tr><td><code>ListTablesCommand.cs</code> / <code>DiscoverWriteApiCommand.cs</code> / <code>HelloCommand.cs</code></td><td>Diagnostic / debug entries used during bring-up.</td></tr>
@@ -610,6 +1022,25 @@
         the same <code>Label</code> and point the new component's <code>Field</code> / <code>FieldId</code>
         there.</li>
   </ul>
+
+  <h3>Property edits (rename / retype) — <code>FieldMutator</code></h3>
+  <p>
+    The refactor tools (<em>Safe rename field</em>, <em>Batch rename</em>,
+    <em>Batch retype fields</em>) don't add or remove fields — they change existing properties.
+    The pattern is simpler than the insert recipe but still needs the mark-dirty dance:
+  </p>
+  <ol>
+    <li>Back up the <code>.DCT</code> first via <code>FieldMutator.Backup</code>.</li>
+    <li>For each property to change, try the public setter first. If the property is read-only
+        or the setter routes through a code path that discards the value, fall back to the
+        non-public backing field walking the class hierarchy
+        (<code>name</code>, <code>_name</code>, <code>_Name</code>, <code>m_Name</code>, …).</li>
+    <li>Flip <code>itemHasChanged = true</code>, <code>stored = true</code>, and
+        <code>Touched = true</code> on the mutated instance.</li>
+    <li>Call <code>SetInFile</code> on the field / table / dict where available.</li>
+    <li>Run <code>FieldMutator.ForceMarkDirty(dict, viewContent, result)</code>, which does the
+        same IsDirty / ChildListTouched / OnIsDirtyChanged cascade as the add path.</li>
+  </ol>
 
   <h3>Marking dirty for save</h3>
   <p>The editor's Save button is driven by SharpDevelop's <code>ICanBeDirty.IsDirty</code> on the
