@@ -31,13 +31,15 @@ namespace ClarionDctAddin
         void BuildUi()
         {
             Text = "Dictionary Tasker";
-            Width = 820;
-            Height = 520;
+            Width = 880;
+            Height = 660;
+            MinimumSize = new Size(760, 540);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgColor;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
             MinimizeBox = false;
+            SizeGripStyle = SizeGripStyle.Show;
             ShowIcon = false;
             ShowInTaskbar = false;
 
@@ -102,6 +104,16 @@ namespace ClarionDctAddin
                 WrapContents = false,
                 AutoScroll = true
             };
+            // Keep tile widths in step with the right column as the form resizes.
+            body.SizeChanged += delegate
+            {
+                int targetWidth = Math.Max(360, body.ClientSize.Width - body.Padding.Horizontal - 4);
+                foreach (Control c in body.Controls)
+                {
+                    if (c is LauncherTile) c.Width = targetWidth;
+                }
+            };
+
             body.Controls.Add(MakeTile("Browse tables",
                 "Tabbed explorer with table list, hierarchy tree, and relations diagram. Export tables to JSON.",
                 LauncherTileKind.BrowseTables,
