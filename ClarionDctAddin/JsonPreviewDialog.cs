@@ -34,7 +34,7 @@ namespace ClarionDctAddin
                  btnYaml, btnPaths, btnSchema, btnTable;
 
         enum Style { Pretty2, Pretty4, Tabs, Minified, Tree, Yaml, Paths, Schema, Table }
-        Style currentStyle = Style.Pretty2;
+        Style currentStyle = Style.Tree;
 
         JsonParser.JsonNode parsedRoot;      // lazy-parsed on first use
         bool                parseAttempted;  // so we only try once; errors surface per-style
@@ -46,7 +46,7 @@ namespace ClarionDctAddin
             this.suggestedFileName = suggestedFileName ?? "export.json";
             this.initialDir = initialDir;
             BuildUi();
-            ApplyStyle(Style.Pretty2);
+            ApplyStyle(Style.Tree);
         }
 
         void BuildUi()
