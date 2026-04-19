@@ -28,6 +28,7 @@ namespace ClarionDctAddin
         SplitContainer split;
 
         ClarionFileAccessor.ReadResult lastResult;
+        SqlTableAccessor.ReadResult    lastSqlResult;
 
         public ViewDataDialog(object dict, object table)
         {
@@ -133,8 +134,14 @@ namespace ClarionDctAddin
         {
             split.Panel2Collapsed = !split.Panel2Collapsed;
             btnShowLog.Text = split.Panel2Collapsed ? "Show log" : "Hide log";
-            if (!split.Panel2Collapsed && lastResult != null)
-                txtLog.Text = string.Join("\r\n", lastResult.Log.ToArray());
+            if (!split.Panel2Collapsed) txtLog.Text = CurrentLog();
+        }
+
+        string CurrentLog()
+        {
+            if (lastSqlResult != null) return string.Join("\r\n", lastSqlResult.Log.ToArray());
+            if (lastResult    != null) return string.Join("\r\n", lastResult   .Log.ToArray());
+            return "";
         }
 
         void LoadRows()
@@ -144,45 +151,79 @@ namespace ClarionDctAddin
             try
             {
                 int n = (int)numRows.Value;
-                var r = ClarionFileAccessor.OpenForRead(dict, table, n);
-                lastResult = r;
-                if (!split.Panel2Collapsed) txtLog.Text = string.Join("\r\n", r.Log.ToArray());
+                var driver = DictModel.AsString(DictModel.GetProp(table, "FileDriverName")) ?? "";
+                lastResult = null;
+                lastSqlResult = null;
 
-                if (!r.Ok)
-                {
-                    grid.Columns.Clear();
-                    grid.Rows.Clear();
-                    lblStatus.Text = "Could not read data: " + r.Error
-                        + "   ·   click Show log for details.";
-                    return;
-                }
+                if (SqlTableAccessor.IsSqlServerDriver(driver))
+                    LoadViaSql(n);
+                else
+                    LoadViaClarionFile(n);
 
-                grid.Columns.Clear();
-                grid.Rows.Clear();
-                for (int i = 0; i < r.ColumnLabels.Count; i++)
-                {
-                    var col = new DataGridViewTextBoxColumn
-                    {
-                        HeaderText = r.ColumnLabels[i] + "\n" + r.ColumnTypes[i],
-                        Name = r.ColumnLabels[i]
-                    };
-                    grid.Columns.Add(col);
-                }
-                foreach (var rowObj in r.Rows)
-                {
-                    var values = rowObj as List<object>;
-                    if (values == null) continue;
-                    grid.Rows.Add(values.Select(v => v == null ? "" : v.ToString()).ToArray());
-                }
-                lblStatus.Text = r.Rows.Count + " row(s) loaded"
-                    + "   ·   scanned " + r.TotalScanned
-                    + (r.Rows.Count < n ? "   ·   end of file reached before " + n + " rows" : "");
+                if (!split.Panel2Collapsed) txtLog.Text = CurrentLog();
             }
             finally
             {
                 btnLoad.Enabled = true;
                 Cursor = Cursors.Default;
             }
+        }
+
+        void LoadViaSql(int n)
+        {
+            var r = SqlTableAccessor.Read(dict, table, n);
+            lastSqlResult = r;
+            grid.Columns.Clear();
+            grid.Rows.Clear();
+            if (!r.Ok)
+            {
+                lblStatus.Text = "Could not read data: " + r.Error + "   ·   click Show log for details.";
+                return;
+            }
+            for (int i = 0; i < r.ColumnNames.Count; i++)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    HeaderText = r.ColumnNames[i] + "\n" + r.ColumnTypes[i],
+                    Name = r.ColumnNames[i]
+                };
+                grid.Columns.Add(col);
+            }
+            foreach (var row in r.Rows)
+                grid.Rows.Add(row.Select(v => v == null ? "" : v.ToString()).ToArray());
+            lblStatus.Text = r.Rows.Count + " row(s) loaded via MSSQL   ·   "
+                + grid.Columns.Count + " columns";
+        }
+
+        void LoadViaClarionFile(int n)
+        {
+            var r = ClarionFileAccessor.OpenForRead(dict, table, n);
+            lastResult = r;
+            grid.Columns.Clear();
+            grid.Rows.Clear();
+            if (!r.Ok)
+            {
+                lblStatus.Text = "Could not read data: " + r.Error + "   ·   click Show log for details.";
+                return;
+            }
+            for (int i = 0; i < r.ColumnLabels.Count; i++)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    HeaderText = r.ColumnLabels[i] + "\n" + r.ColumnTypes[i],
+                    Name = r.ColumnLabels[i]
+                };
+                grid.Columns.Add(col);
+            }
+            foreach (var rowObj in r.Rows)
+            {
+                var values = rowObj as List<object>;
+                if (values == null) continue;
+                grid.Rows.Add(values.Select(v => v == null ? "" : v.ToString()).ToArray());
+            }
+            lblStatus.Text = r.Rows.Count + " row(s) loaded"
+                + "   ·   scanned " + r.TotalScanned
+                + (r.Rows.Count < n ? "   ·   end of file reached before " + n + " rows" : "");
         }
     }
 }
