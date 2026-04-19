@@ -38,8 +38,14 @@ A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently ope
 ### Visualization
 - **Export relations map** — standalone SVG with a grid layout (sorted by degree, isolated tables hideable). Self-contained — no external renderer required.
 
-### Refactoring
-- **Standard audit pack** — preview-only: pick tables + pack fields (Guid, CreatedOn/By, ModifiedOn/By, DeletedOn), emit a Markdown recipe of what would be added. Pair with **Batch copy fields** to apply.
+### Refactoring (mutation)
+- **Safe rename field** — rename a field's label. Keys and relations follow automatically (they hold object refs); trigger bodies patched via word-boundary regex of `OLDLABEL` and `PREFIX:OLDLABEL`. `.DCT` backed up first.
+- **Batch rename (regex)** — regex find/replace across field Label / Description / Heading / Prompt, optionally scoped by table name regex. Preview the plan, then apply with backup.
+- **Batch retype fields** — select every field whose label matches a regex, change type / size / picture in one shot. Any field blank means "preserve". Preview + apply with backup.
+- **Standard audit pack** — preview-only: pick tables + pack fields (Guid, CreatedOn/By, ModifiedOn/By, DeletedOn), emit a Markdown recipe. Pair with **Batch copy fields** to apply.
+
+### Enterprise glue
+- **Git commit hook** — detects the repo root, shows `git status` for the `.DCT`, seeds a commit message, commits and optionally pushes. Manual rather than auto-on-save, for reliability across Clarion 12 point releases.
 
 ### Generation & export
 - **SQL DDL export** — live preview window, 5 dialects (SQL Server, PostgreSQL, SQLite, MySQL, MariaDB). Whole dictionary or single table. Remembers the preferred dialect.
@@ -125,6 +131,11 @@ User preferences (e.g. preferred SQL dialect) live in:
 | `ChangeLogDialog.cs` | Two-snapshot Markdown changelog generator. |
 | `RelationsMapExportDialog.cs` | Grid-layout SVG export of the relation graph. |
 | `StandardAuditPackDialog.cs` | Preview + Markdown recipe for the audit pack. |
+| `SafeRenameFieldDialog.cs` | Rename one field + patch trigger bodies. |
+| `BatchRenameDialog.cs` | Regex find/replace over field text properties. |
+| `BatchRetypeDialog.cs` | Pattern-match + retype fields in one shot. |
+| `FieldMutator.cs` | Shared reflection helper for in-place field property edits. |
+| `GitCommitDialog.cs` | Manual git commit / push for the .DCT. |
 | `GlobalSearchDialog.cs` | Full-dict search across tables/fields/keys/relations/triggers. |
 | `WhereUsedDialog.cs` | Find every key / relation / trigger that references a given field. |
 | `PathFinderDialog.cs` | Shortest relation path between two tables. |

@@ -152,11 +152,17 @@ namespace ClarionDctAddin
             body.Controls.Add(MakeSection("Refactoring", new[]
             {
                 new ToolDef { Name = "Safe rename field",
-                              Description = "Rename a field's label and auto-update every key component, relation mapping, and trigger that referenced it." },
+                              Description = "Rename a field's label. Keys and relations update automatically (they hold object refs); optionally word-boundary patch PREFIX:oldlabel in every trigger body. Backs up the .DCT first.",
+                              Implemented = true,
+                              OnClick = delegate { OpenSafeRename(); } },
                 new ToolDef { Name = "Batch rename (regex)",
-                              Description = "Pattern find/replace across field labels, descriptions, headings, prompts." },
+                              Description = "Pattern find/replace across field labels, descriptions, headings, prompts. Optional table filter. Preview plan, then apply with .DCT backup.",
+                              Implemented = true,
+                              OnClick = delegate { OpenBatchRename(); } },
                 new ToolDef { Name = "Batch retype fields",
-                              Description = "Select every field matching a name pattern, change type / size / picture in one shot." },
+                              Description = "Select every field whose label matches a regex; change type / size / picture in one shot. Any field blank = keep current. Preview + apply with .DCT backup.",
+                              Implemented = true,
+                              OnClick = delegate { OpenBatchRetype(); } },
                 new ToolDef { Name = "Standard audit pack",
                               Description = "Preset: adds guid, CreatedOn/By, ModifiedOn/By, DeletedOn + unique key + triggers to every selected table. This version is preview-only — emits a Markdown recipe.",
                               Implemented = true,
@@ -174,7 +180,9 @@ namespace ClarionDctAddin
             body.Controls.Add(MakeSection("Enterprise glue", new[]
             {
                 new ToolDef { Name = "Git commit hook",
-                              Description = "After save, if the DCT is in a repo, auto-commit with a generated message based on the diff from the previous version." },
+                              Description = "Manual git commit for the .DCT file. Detects the repo root, shows git status for the dict, auto-generates a commit message, commits and optionally pushes.",
+                              Implemented = true,
+                              OnClick = delegate { OpenGitCommit(); } },
                 new ToolDef { Name = "Change-log generator",
                               Description = "Compare two *.tasker-snap save-points and emit a human-readable Markdown changelog.",
                               Implemented = true,
@@ -374,6 +382,34 @@ namespace ClarionDctAddin
         {
             Hide();
             using (var dlg = new StandardAuditPackDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenSafeRename()
+        {
+            Hide();
+            using (var dlg = new SafeRenameFieldDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenBatchRename()
+        {
+            Hide();
+            using (var dlg = new BatchRenameDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenBatchRetype()
+        {
+            Hide();
+            using (var dlg = new BatchRetypeDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenGitCommit()
+        {
+            Hide();
+            using (var dlg = new GitCommitDialog(dict)) dlg.ShowDialog(this);
             Show();
         }
     }
