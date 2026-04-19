@@ -318,6 +318,40 @@
     and Description. Double-click a row to open the field browser for that table. The bottom button
     strip also lets you export the selected table or all tables to JSON.
   </p>
+  <h4>Filter bar</h4>
+  <p>
+    Above the list:
+  </p>
+  <ul>
+    <li><strong>Filter textbox</strong> — incremental substring match across every column
+        (name / prefix / driver / fields / keys / description). Case-insensitive, re-runs
+        on each keystroke.</li>
+    <li><strong>Driver dropdown</strong> — populated from the distinct <code>FileDriverName</code>
+        values actually used in the open dictionary (<em>(all)</em>, <code>MSSQL</code>,
+        <code>TOPSPEED</code>, <code>MEMORY</code>, …). Pick one to narrow the list to that driver.</li>
+    <li><strong>Count label</strong> — <em>"47 of 220 tables"</em>, updates as you filter.</li>
+  </ul>
+  <h4>Column sorting</h4>
+  <p>
+    Click any column header to sort by it; click again to flip direction. The active column shows
+    a small <code>^</code> / <code>v</code> marker. <strong>Fields</strong> and <strong>Keys</strong>
+    sort numerically (9 before 88, not lexicographically), everything else is case-insensitive
+    string compare.
+  </p>
+  <h4>Right-click menu</h4>
+  <p>
+    Per-table actions, all scoped to whatever is selected:
+  </p>
+  <ul>
+    <li><strong>Show fields...</strong> — opens the field browser.</li>
+    <li><strong>Export to JSON...</strong> — routes through the JSON preview window.</li>
+    <li><strong>Export SQL DDL...</strong> — preview window with a dialect picker.</li>
+    <li><strong>Copy table name</strong>.</li>
+    <li><strong>Lint this table...</strong> — per-table lint findings.</li>
+    <li><strong>Fix fields...</strong> — editable Description / Picture grid (see the
+        <a href="#tools-lint">Validation &amp; lint</a> section).</li>
+    <li><strong>More dictionary tools...</strong> — opens the full tools catalogue.</li>
+  </ul>
   <h4>Field browser</h4>
   <p>
     Opened from a Tables row, this modal shows every column on the selected table: Name, Full name
@@ -588,7 +622,7 @@
   <table>
     <thead><tr><th>Category</th><th>Tools</th></tr></thead>
     <tbody>
-      <tr><td><a href="#tools-lint">Validation &amp; lint</a></td><td>Lint report, Picture consistency, Naming conventions</td></tr>
+      <tr><td><a href="#tools-lint">Validation &amp; lint</a></td><td>Lint report, Fix fields (editable grid), Picture consistency, Naming conventions</td></tr>
       <tr><td><a href="#tools-analysis">Analysis &amp; stats</a></td><td>Health dashboard, Dead tables, Duplicate fields</td></tr>
       <tr><td><a href="#tools-search">Search &amp; navigation</a></td><td>Global search, Where used, Path finder</td></tr>
       <tr><td><a href="#tools-compare">Compare &amp; diff</a></td><td>Compare tables, Compare dictionaries, Change-log generator</td></tr>
@@ -613,27 +647,59 @@
 
   <h3>Lint report</h3>
   <p>
-    Full-dictionary scan covering: empty tables, tables with no keys, tables with no primary key,
-    tables participating in zero relations, duplicate keys (same components), and orphaned
-    relations. Findings grouped by severity (Error / Warning / Info) with a filter box for
-    quick narrowing. Also available as a per-table scan via right-click → <em>Lint this table</em>.
-  </p>
-
-  <h3>Picture consistency</h3>
-  <p>
-    Flags fields whose <code>ScreenPicture</code> doesn't match the category of their
-    <code>DataType</code>:
+    Full-dictionary scan covering structural AND style issues:
   </p>
   <ul>
-    <li><code>DATE</code> without <code>@d*</code> → warning.</li>
-    <li><code>TIME</code> without <code>@t*</code> → warning.</li>
-    <li><code>DECIMAL</code> / <code>REAL</code> without <code>@n</code> → warning;
-        money-ish labels (<code>amount</code>, <code>precio</code>, …) without <code>@n$*.*</code> → info.</li>
-    <li><code>STRING</code> / <code>CSTRING</code> / <code>PSTRING</code> with a
-        date/time/numeric picture → error.</li>
-    <li><strong>Cross-table consistency</strong>: when the same field label appears on many
-        tables with divergent <code>(type, picture)</code> combos → warning.</li>
+    <li>Tables: empty, no keys, no primary key, no relations.</li>
+    <li>Keys: empty components, duplicate component sets, empty <code>ExternalName</code>.</li>
+    <li>Fields: no description, no picture, whitespace in label.</li>
+    <li>Picture shape — <code>DATE</code> needs <code>@d*</code>, <code>TIME</code>
+        <code>@t*</code>, numerics <code>@n*</code>, STRING forbids <code>@d</code>/<code>@t</code>/<code>@n</code>.
+        <strong>LONG / ULONG</strong> accept <code>@n</code>, <code>@d</code>, or <code>@t</code> because
+        Clarion uses LONG as the underlying storage for dates (days since epoch) and times
+        (centiseconds since midnight).</li>
+    <li>Money-ish labels (<code>amount</code>, <code>precio</code>, …) on numerics without
+        <code>@n$</code> → info-level suggestion to use a currency marker.</li>
   </ul>
+  <p>
+    Findings grouped by severity (Error / Warning / Info) with a filter box for quick narrowing.
+    Also available as a per-table scan via right-click → <em>Lint this table</em> on the Tables
+    list, Tree view, or Relations diagram.
+  </p>
+
+  <h3>Fix fields — editable grid</h3>
+  <p>
+    The repairable subset of the lint (missing description, missing picture, malformed picture)
+    typically accounts for the bulk of findings. Instead of clicking into each field one at a
+    time, <strong>Fix fields...</strong> opens a <code>DataGridView</code> with one row per
+    flagged field and the <strong>Description</strong> + <strong>Picture</strong> columns
+    editable inline:
+  </p>
+  <ul>
+    <li><strong>Live re-check</strong> — edit a DATE field's picture to <code>@d6</code> and
+        the Issues cell clears on the spot; type a bad value and the message reappears.
+        Dirty cells get a soft amber tint so you can see at a glance what will be written.</li>
+    <li><strong>Apply changes...</strong> confirms the counts (description vs. picture),
+        writes a <code>.tasker-bak-&lt;timestamp&gt;</code> backup of the <code>.DCT</code>,
+        then pushes each edited row through <code>FieldMutator.SetStringProp</code> — the
+        same reflection path Safe rename and Batch rename use. Failures are reported
+        per-field.</li>
+    <li><strong>Rescan</strong> picks up anything added to the dict in the meantime.</li>
+  </ul>
+  <p>
+    Launched from the <strong>Fix fields...</strong> button on the Lint report dialog, or from
+    right-click → <em>Fix fields...</em> on any table list (Tables tab / Tree / Relations).
+    Scope follows the launcher: whole-dict scope from the lint report, single-table scope from
+    a right-click.
+  </p>
+
+  <h3>Picture consistency (standalone)</h3>
+  <p>
+    Same per-type rules as the lint report, plus a <strong>cross-table consistency</strong>
+    pass: when the same field label appears on many tables with divergent
+    <code>(type, picture)</code> combos it flags the label as inconsistent. That cross-table
+    pass needs whole-dict scope so it doesn't live on the per-table right-click.
+  </p>
 
   <h3>Naming conventions</h3>
   <p>
@@ -1066,6 +1132,7 @@ R     &lt;name&gt;  &lt;related-table&gt;
       <tr><td><code>ToolsDialog.cs</code></td><td>Catalogue window — categorised grid of every dictionary tool. Bold = implemented.</td></tr>
       <tr><td><code>LintEngine.cs</code> / <code>LintReportDialog.cs</code></td><td>Structural lint findings + report dialog.</td></tr>
       <tr><td><code>PictureConsistencyDialog.cs</code> / <code>NamingConventionsDialog.cs</code></td><td>Style lints with configurable rules.</td></tr>
+      <tr><td><code>LintFixItDialog.cs</code></td><td>Editable <code>DataGridView</code> of fields flagged for missing or malformed description / picture; applies edits through <code>FieldMutator</code>.</td></tr>
       <tr><td><code>HealthDashboardDialog.cs</code> / <code>DeadTablesDialog.cs</code> / <code>DuplicateFieldsDialog.cs</code></td><td>Analysis dialogs (stats, dead tables, duplicate fields).</td></tr>
       <tr><td><code>GlobalSearchDialog.cs</code> / <code>WhereUsedDialog.cs</code> / <code>PathFinderDialog.cs</code></td><td>Search + navigation across the dict.</td></tr>
       <tr><td><code>CompareTablesDialog.cs</code> / <code>CompareDictionariesDialog.cs</code> / <code>ChangeLogDialog.cs</code></td><td>Diff dialogs (in-dict, live-vs-snapshot, snapshot-vs-snapshot).</td></tr>
@@ -1073,7 +1140,7 @@ R     &lt;name&gt;  &lt;related-table&gt;
       <tr><td><code>SqlDdlGenerator.cs</code> / <code>SqlDdlDialog.cs</code></td><td>5-dialect DDL generator + live-preview dialog. Remembers preferred dialect via <code>Settings</code>.</td></tr>
       <tr><td><code>ModelClassesGenerator.cs</code> / <code>ModelClassesDialog.cs</code></td><td>C# + TypeScript emitters with PascalCase / camelCase name mapping.</td></tr>
       <tr><td><code>MarkdownGenerator.cs</code> / <code>MarkdownDialog.cs</code></td><td>Full-dict or single-table Markdown reference.</td></tr>
-      <tr><td><code>FieldMutator.cs</code></td><td>Shared helper for in-place field property edits (rename, retype, description tweaks) — sets backing fields + <code>itemHasChanged</code> / <code>stored</code> / <code>Touched</code>, then marks view dirty.</td></tr>
+      <tr><td><code>FieldMutator.cs</code></td><td>Shared helper for in-place field property edits (rename, retype, description / picture tweaks). After the write it fires the full change-tracker fan-out: per-field flags, per-field notify methods, parent-file <code>ChildListTouched</code>, probe for and register in the <code>Fields</code> collection's <code>modifiedItems</code> / <code>changedItems</code> / … tracker, dict-level <code>ChildListTouched</code>, and view <code>IsDirty</code>. Each probe that succeeded is logged so unknown-build member names surface in the result dialog.</td></tr>
       <tr><td><code>SafeRenameFieldDialog.cs</code> / <code>BatchRenameDialog.cs</code> / <code>BatchRetypeDialog.cs</code></td><td>Refactor tools built on <code>FieldMutator</code>.</td></tr>
       <tr><td><code>StandardAuditPackDialog.cs</code></td><td>Audit-field propagator; runs through <code>FieldCopier.Apply</code>.</td></tr>
       <tr><td><code>RelationsMapExportDialog.cs</code></td><td>Standalone SVG export with its own grid layout.</td></tr>
@@ -1126,24 +1193,47 @@ R     &lt;name&gt;  &lt;related-table&gt;
         there.</li>
   </ul>
 
-  <h3>Property edits (rename / retype) — <code>FieldMutator</code></h3>
+  <h3>Property edits (rename / retype / Fix fields) — <code>FieldMutator</code></h3>
   <p>
-    The refactor tools (<em>Safe rename field</em>, <em>Batch rename</em>,
-    <em>Batch retype fields</em>) don't add or remove fields — they change existing properties.
-    The pattern is simpler than the insert recipe but still needs the mark-dirty dance:
+    The refactor tools and the Fix-fields grid don't add or remove fields — they change
+    existing properties on an already-registered field instance. Sounds simpler than the
+    insert recipe, but it has its own subtle failure mode: the managed model takes the
+    new value happily (so the IDE shows it immediately), while the save pipeline silently
+    drops it because the native TPS change tracker never learned that THIS field was
+    modified. <code>FieldMutator.SetStringProp</code> therefore fires a fan-out of
+    notifications after each write:
   </p>
   <ol>
     <li>Back up the <code>.DCT</code> first via <code>FieldMutator.Backup</code>.</li>
-    <li>For each property to change, try the public setter first. If the property is read-only
-        or the setter routes through a code path that discards the value, fall back to the
-        non-public backing field walking the class hierarchy
-        (<code>name</code>, <code>_name</code>, <code>_Name</code>, <code>m_Name</code>, …).</li>
-    <li>Flip <code>itemHasChanged = true</code>, <code>stored = true</code>, and
-        <code>Touched = true</code> on the mutated instance.</li>
-    <li>Call <code>SetInFile</code> on the field / table / dict where available.</li>
-    <li>Run <code>FieldMutator.ForceMarkDirty(dict, viewContent, result)</code>, which does the
-        same IsDirty / ChildListTouched / OnIsDirtyChanged cascade as the add path.</li>
+    <li>Write the value — try the public setter first; if the property is read-only or
+        the setter discards the value, fall back to the non-public backing field walking
+        the class hierarchy (<code>name</code>, <code>_name</code>, <code>_Name</code>,
+        <code>m_Name</code>, …).</li>
+    <li>Flip per-field flags: <code>itemHasChanged = true</code>, <code>stored = true</code>,
+        <code>Touched = true</code>.</li>
+    <li>Invoke every per-field "I've changed" method we know about by name:
+        <code>SetInFile</code>, <code>Touch</code>, <code>DoUpdate</code>,
+        <code>NotifyUpdate</code>, <code>NotifyChanged</code>, <code>MarkChanged</code>.</li>
+    <li>Walk up to the parent <code>DDFile</code> and call <code>ChildListTouched</code>,
+        <code>FieldChanged(field)</code>, <code>ChildTouched(field)</code>.</li>
+    <li><strong>Probe the parent <code>Fields</code> collection</strong> for a change-tracker
+        dictionary — candidate names <code>modifiedItems</code>, <code>changedItems</code>,
+        <code>updatedItems</code>, <code>dirtyItems</code>, <code>addedItems</code> — and
+        register the field there keyed by its <code>Id</code>. This is the modification-side
+        analogue of the <code>addedItems</code> hook <code>FieldCopier</code> uses for inserts,
+        and in practice it's the one the save pipeline reads when deciding which records to
+        write back to the native TPS store. Without it, the edit stays in the managed model
+        and is lost when the <code>.DCT</code> saves.</li>
+    <li>Call <code>ChildListTouched</code> on the <code>DataDictionary</code>.</li>
+    <li>Run <code>FieldMutator.ForceMarkDirty(dict, viewContent, result)</code> for the usual
+        IsDirty / OnIsDirtyChanged cascade so Clarion's Save button lights up.</li>
   </ol>
+  <p>
+    Every probe that fired writes a short token into the result log
+    (<code>setter / item=chg / stored / coll.modifiedItems / file.ChildTouched</code> …) so
+    if a future Clarion build routes through a member name we haven't listed, the per-field
+    log tells us exactly which probe to add.
+  </p>
 
   <h3>Marking dirty for save</h3>
   <p>The editor's Save button is driven by SharpDevelop's <code>ICanBeDirty.IsDirty</code> on the

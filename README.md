@@ -6,7 +6,7 @@ A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently ope
 
 ### Browse & navigate
 - **Launcher** — tiled home screen with quick access to the main views and the full tools catalogue.
-- **Browse tables** — modal list with driver / prefix / field count / description.
+- **Browse tables** — modal list with driver / prefix / field count / description. Click-to-sort columns (numeric for Fields/Keys, string-insensitive elsewhere), incremental text filter, Driver dropdown, and a live count label. Right-click any row for per-table actions: **Show fields**, **Export to JSON**, **Export SQL DDL**, **Lint this table**, **Fix fields**.
 - **Show fields** — per-table column view (`Name`, `Type`, `Size`, `Places`, `Picture`, `Heading`, `Prompt`, `Description`, `External name`, ...).
 - **Tree view** — hierarchical dictionary → tables → Fields / Keys / Relations / Triggers → leaf properties. Lazy-loaded for large dictionaries.
 - **Relations diagram** — auto-laid-out boxes-and-arrows chart.
@@ -18,7 +18,8 @@ A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently ope
 - Automatic `.tasker-bak-*` backup of the `.DCT` before any mutation.
 
 ### Validation & analysis (read-only)
-- **Lint report** — missing primary keys, empty tables, orphaned relations, duplicate keys, undocumented fields.
+- **Lint report** — missing primary keys, empty tables, orphaned relations, duplicate keys, undocumented fields, malformed pictures (DATE needs `@d*`, numeric `@n*`; LONG/ULONG accept `@n`/`@d`/`@t` since Clarion stores dates as LONG).
+- **Fix fields (editable grid)** — the repairable subset of the lint shown in a DataGridView with Description and Picture columns editable inline; live re-check as you type; Apply writes through `FieldMutator` with a `.DCT` backup first.
 - **Picture consistency** — flag DATE fields without `@d*`, numerics without `@n*`, STRING with a non-string picture, and labels that appear on many tables with divergent (type, picture) combos.
 - **Naming conventions** — tables UPPERCASE, prefixes 2-4 uppercase chars, labels with no whitespace / no digit-start, key-naming convention. Rules togglable at runtime.
 - **Health dashboard** — totals, top-10 largest tables, driver mix bar chart, relations-per-table histogram.
