@@ -7,11 +7,18 @@ using System.Windows.Forms;
 
 namespace ClarionDctAddin
 {
-    // Compare the currently-open dictionary against a *.tasker-snap snapshot.
-    // Clarion can only hold one .DCT open at a time, so the workflow is:
-    //   1. Save a snapshot of the current dict.
-    //   2. Modify the dict (or open a different dict in Clarion).
-    //   3. Load the saved snapshot here — tree shows Added / Removed / Changed tables.
+    // Compare the currently-open dictionary against either another open .DCT tab
+    // or a *.tasker-snap snapshot from disk.
+    //
+    // Live-vs-live: Clarion 12 happily holds multiple .DCTs open at once and
+    // SharpDevelop's ViewContentCollection surfaces every one of them (that's
+    // what DictionaryOpenCondition enumerates to enable the toolbar button).
+    // "Compare to another open dict..." captures both sides as snapshots in
+    // memory and hands them to DictDiff.
+    //
+    // Live-vs-snapshot: still useful when the "other" side is a previous
+    // point in time. Save a .tasker-snap now, load it later to diff against
+    // whatever's live at that moment.
     internal class CompareDictionariesDialog : Form
     {
         static readonly Color BgColor      = Color.FromArgb(245, 247, 250);

@@ -32,7 +32,11 @@ A SharpDevelop add-in for the **Clarion 12 IDE** that inspects the currently ope
 
 ### Compare & diff
 - **Compare tables** — pick two tables in the current dict, diff their fields + keys side-by-side (Same / Differs / Only-A / Only-B).
-- **Compare dictionaries** — save a `*.tasker-snap` snapshot of the current dict, later load it and compare against the live dict (or a completely different dict). Tree view of Added / Removed / Changed tables with field-, key-, and relation-level drill-down. Exportable as Markdown.
+- **Compare dictionaries** — two flows:
+  - *Live vs. live:* when more than one `.DCT` tab is open, pick **Compare to another open dict...** — the add-in enumerates every open `DataDictionaryViewContent` in the workbench, shows a picker if >2 are open, and diffs them directly.
+  - *Live vs. snapshot:* save a `*.tasker-snap` file now, re-open the dialog later (possibly against a different dict) and **Load snapshot & compare...** to diff the stored structure against the currently-active live dict.
+
+  Either way, the result is a tree of Added / Removed / Changed tables with field-, key-, and relation-level drill-down. Exportable as Markdown.
 - **Change-log generator** — pick two `*.tasker-snap` save-points, emit a human-readable Markdown changelog suitable for a release note or a PR description.
 
 ### Visualization

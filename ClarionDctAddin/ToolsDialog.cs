@@ -120,7 +120,7 @@ namespace ClarionDctAddin
             body.Controls.Add(MakeSection("Compare & diff", new[]
             {
                 new ToolDef { Name = "Compare dictionaries",
-                              Description = "Save a snapshot of the current dict, then compare a later version (or a different dict) against it. Structural diff: added/removed tables, changed fields, changed keys. Exportable as Markdown.",
+                              Description = "Live-vs-live when two .DCTs are open (Clarion supports multiple tabs); or live-vs-snapshot via a saved *.tasker-snap. Structural diff of tables, fields, keys, relations. Exportable as Markdown.",
                               Implemented = true,
                               OnClick = delegate { OpenCompareDictionaries(); } },
                 new ToolDef { Name = "Compare tables",
