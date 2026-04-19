@@ -29,8 +29,18 @@ namespace ClarionDctAddin
 
         DataGridView grid;
         Label        lblSummary;
-        Button       btnApply, btnRefresh;
+        Button       btnApply, btnRefresh, btnAutoBlank, btnAutoAll;
+        ComboBox     cbDescStyle;
         List<Row>    rows = new List<Row>();
+
+        enum DescStyle
+        {
+            Humanized,   // first_name   -> First name
+            Heading,     // copy DDField.ColumnHeading
+            Prompt,      // copy DDField.PromptText
+            BestAvailable, // heading | prompt | humanized — first non-blank
+            Verbatim     // label as-is (e.g. CREATED_BY -> CREATED_BY)
+        }
 
         sealed class Row
         {
@@ -81,6 +91,24 @@ namespace ClarionDctAddin
                     : "Fix fields   table: " + scope
             };
 
+            var autoBar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = BgColor, Padding = new Padding(16, 8, 16, 4) };
+            var lblStyle = new Label { Text = "Auto-fill description:", Left = 0, Top = 8, AutoSize = true, Font = new Font("Segoe UI", 9F) };
+            cbDescStyle = new ComboBox { Left = 138, Top = 4, Width = 340, DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Segoe UI", 9F) };
+            cbDescStyle.Items.Add("Best available  (heading | prompt | humanized label)");
+            cbDescStyle.Items.Add("Humanized label   (first_name -> First name)");
+            cbDescStyle.Items.Add("Column heading    (copy DDField.ColumnHeading)");
+            cbDescStyle.Items.Add("Prompt text       (copy DDField.PromptText)");
+            cbDescStyle.Items.Add("Label verbatim    (copy the label as-is)");
+            cbDescStyle.SelectedIndex = 0;
+            btnAutoBlank = new Button { Text = "Fill blanks", Left = 490, Top = 2, Width = 110, Height = 30, FlatStyle = FlatStyle.System };
+            btnAutoBlank.Click += delegate { AutoFillDescriptions(onlyBlanks: true); };
+            btnAutoAll = new Button { Text = "Fill all (overwrite)", Left = 606, Top = 2, Width = 160, Height = 30, FlatStyle = FlatStyle.System };
+            btnAutoAll.Click += delegate { AutoFillDescriptions(onlyBlanks: false); };
+            autoBar.Controls.Add(lblStyle);
+            autoBar.Controls.Add(cbDescStyle);
+            autoBar.Controls.Add(btnAutoBlank);
+            autoBar.Controls.Add(btnAutoAll);
+
             lblSummary = new Label
             {
                 Dock = DockStyle.Top, Height = 26,
@@ -128,8 +156,86 @@ namespace ClarionDctAddin
             Controls.Add(grid);
             Controls.Add(bottom);
             Controls.Add(lblSummary);
+            Controls.Add(autoBar);
             Controls.Add(header);
             CancelButton = btnClose;
+        }
+
+        void AutoFillDescriptions(bool onlyBlanks)
+        {
+            var style = (DescStyle)cbDescStyle.SelectedIndex;
+            int touched = 0;
+            for (int i = 0; i < grid.Rows.Count; i++)
+            {
+                var gRow = grid.Rows[i];
+                var r = gRow.Tag as Row;
+                if (r == null) continue;
+                if (onlyBlanks && !string.IsNullOrWhiteSpace(r.Description)) continue;
+                var suggested = MakeDesc(style, r);
+                if (string.IsNullOrEmpty(suggested)) continue;
+                if (string.Equals(suggested, r.Description, StringComparison.Ordinal)) continue;
+                r.Description = suggested;
+                gRow.Cells["Description"].Value = suggested;
+                r.Issues = BuildIssues(r.DataType, r.Label, r.Description, r.Picture);
+                gRow.Cells["Issues"].Value = r.Issues;
+                PaintRow(gRow, r);
+                touched++;
+            }
+            UpdateSummary();
+            if (touched == 0)
+                MessageBox.Show(this, onlyBlanks
+                    ? "No blank descriptions to fill (or the chosen source was empty for every blank row)."
+                    : "No rows changed — all rows already match the chosen source, or the source is blank everywhere.",
+                    "Fix fields", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        static string MakeDesc(DescStyle style, Row r)
+        {
+            var heading = DictModel.AsString(DictModel.GetProp(r.Field, "ColumnHeading")) ?? "";
+            var prompt  = DictModel.AsString(DictModel.GetProp(r.Field, "PromptText")) ?? "";
+            switch (style)
+            {
+                case DescStyle.Humanized:     return Humanize(r.Label);
+                case DescStyle.Heading:       return heading;
+                case DescStyle.Prompt:        return prompt;
+                case DescStyle.Verbatim:      return r.Label ?? "";
+                case DescStyle.BestAvailable:
+                    if (!string.IsNullOrWhiteSpace(heading)) return heading;
+                    if (!string.IsNullOrWhiteSpace(prompt))  return prompt;
+                    return Humanize(r.Label);
+                default: return "";
+            }
+        }
+
+        // first_name -> First name
+        // CreatedOn  -> Created on
+        // NO_DE_RECUPS -> No de recups
+        // IDField    -> Id field
+        // shortname  -> Shortname
+        static string Humanize(string label)
+        {
+            if (string.IsNullOrEmpty(label)) return "";
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < label.Length; i++)
+            {
+                var c = label[i];
+                if (c == '_' || c == '-' || c == '.') { sb.Append(' '); continue; }
+                bool splitBefore = false;
+                if (i > 0 && char.IsUpper(c))
+                {
+                    var prev = label[i - 1];
+                    var next = i + 1 < label.Length ? label[i + 1] : (char)0;
+                    // "camelCase" -> "camel Case"  or  "IDField" -> "ID Field"
+                    if (char.IsLower(prev)) splitBefore = true;
+                    else if (char.IsUpper(prev) && next != 0 && char.IsLower(next)) splitBefore = true;
+                }
+                if (splitBefore) sb.Append(' ');
+                sb.Append(char.ToLowerInvariant(c));
+            }
+            var s = sb.ToString().Trim();
+            while (s.IndexOf("  ", StringComparison.Ordinal) >= 0) s = s.Replace("  ", " ");
+            if (s.Length == 0) return "";
+            return char.ToUpperInvariant(s[0]) + s.Substring(1);
         }
 
         void AddCol(string name, int width, bool readOnly)
