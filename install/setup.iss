@@ -97,8 +97,8 @@ const
 var
   // Page 1: checkbox list -- user picks which Clarion versions to target.
   SelectPage: TInputOptionWizardPage;
-  // Page 2: path editor -- only shown when a ticked version wasn't auto-
-  // detected (or the user wants to adjust a detected path via the Back button).
+  // Page 2: path editor -- always shown so the user can review / override
+  // even auto-detected paths. Only rows for ticked versions are visible.
   PathsPage: TInputDirWizardPage;
   // Auto-detection results cached at wizard start so the checkbox labels
   // and the path page pre-fills stay consistent.
@@ -229,22 +229,6 @@ begin
     end;
 end;
 
-// The path page only needs to show up if at least one ticked version
-// wasn't auto-detected -- in the common case (ticked == detected) we can
-// skip straight to install.
-function NeedPathsPage: Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  for I := 0 to 3 do
-    if IsSelected(I) and (Length(DetectedPathFor(I)) = 0) then
-    begin
-      Result := True;
-      Exit;
-    end;
-end;
-
 procedure SetRowVisible(Idx: Integer; Visible: Boolean);
 begin
   PathsPage.PromptLabels[Idx].Visible := Visible;
@@ -281,7 +265,8 @@ begin
     'Pick one or more Clarion IDEs to install Dictionary Tasker into',
     'Tick every Clarion installation you want to target. The same add-in ' +
     'DLL works in all four versions (targets .NET Framework 4.0). Detected ' +
-    'installs are pre-ticked for you.' + #13#10 + #13#10 +
+    'installs are pre-ticked for you. You''ll confirm or override each ' +
+    'install folder on the next page.' + #13#10 + #13#10 +
     'Important: close every Clarion IDE you''re targeting before clicking ' +
     'Next -- the IDE holds a lock on its add-in DLLs while running.',
     False, False);
@@ -298,9 +283,11 @@ begin
   PathsPage := CreateInputDirPage(
     SelectPage.ID,
     'Clarion installation paths',
-    'Confirm the install folder for each selected Clarion version',
-    'Enter the top-level folder for each selected Clarion -- the one with ' +
-    '"bin" directly below it.',
+    'Review or override the install folder for each selected Clarion',
+    'Auto-detected paths are filled in for you. Change any row to point at ' +
+    'a different install of that Clarion version (e.g. a portable copy or a ' +
+    'second install on another drive). Each folder must be the top-level ' +
+    'Clarion folder -- the one with "bin" directly below it.',
     False,
     'ClarionFolders');
   PathsPage.Add('Clarion 12:');
@@ -313,13 +300,6 @@ begin
   PathsPage.Values[IDX_C111] := DetectedC111;
   PathsPage.Values[IDX_C11]  := DetectedC11;
   PathsPage.Values[IDX_C10]  := DetectedC10;
-end;
-
-function ShouldSkipPage(PageID: Integer): Boolean;
-begin
-  Result := False;
-  if PageID = PathsPage.ID then
-    Result := not NeedPathsPage;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);

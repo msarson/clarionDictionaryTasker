@@ -19,19 +19,24 @@ docs puts you well past that bar.
 
 ## Application steps (you do these)
 
-1. **Sign up.** Go to https://about.signpath.io/ → click **Get Started for
-   Open Source**. Sign in with your GitHub account (the one that owns
-   `robertorenz/clarionDictionaryTasker`).
+Note the two domains -- they're separate things:
+- **signpath.org** -- the *Foundation* (non-profit). This is who
+  sponsors free code signing for OSS projects.
+- **signpath.io** -- the *commercial* product. Same company, but paid.
 
-2. **Create an organization.** Name it something like `Roberto Renz` or
-   `Dictionary Tasker`. This is the billing/ownership container; for OSS
-   it's free.
+You want the Foundation's application form.
 
-3. **Apply for Open Source Sponsorship.** In the org dashboard, find the
-   "Open Source" or "Apply for sponsorship" link. Fill in:
+1. **Go to the Foundation apply page:** https://signpath.org/apply
+   (or start at https://signpath.org/ and click **Apply** in the top
+   navigation -- same destination). The page title reads "Apply for a
+   free SignPath.io subscription" which is confusing but correct: the
+   Foundation sponsors free access to the .io product.
+
+2. **Fill in the form.** Have this ready to paste:
    - **Project name:** Dictionary Tasker
    - **Repository URL:** https://github.com/robertorenz/clarionDictionaryTasker
-   - **License:** MIT
+   - **License:** MIT (OSI-approved)
+   - **Contact email:** roberto.renz@reddinassessments.com
    - **Description:** Clarion IDE add-in that adds dictionary maintenance,
      linting, comparison, SQL DDL generation, and batch editing tools to
      Clarion 10, 11, 11.1, and 12. Distributed as a signed Inno Setup
@@ -40,9 +45,25 @@ docs puts you well past that bar.
      a DLL into their IDE. Unsigned installers trip SmartScreen and make
      non-technical users hesitate; a trusted signature removes friction
      and lets the IDE's add-in loader verify provenance.
+   - **Build reproducibility:** Inno Setup compiles `install/setup.iss`
+     against `ClarionDctAddin\bin\Debug\ClarionDctAddin.dll`; the build
+     is scripted (`install/build-installer.bat`) and can be reproduced
+     in CI with the Windows .NET Framework 4.0 targeting pack + Inno
+     Setup 6.
+
+3. **Accept their terms.** Key constraints to be aware of before you
+   submit (these come from https://signpath.org/terms.html):
+   - No malware / PUPs.
+   - OSI license without commercial dual-licensing.
+   - No proprietary non-OSS components bundled (system libs are fine).
+   - Must be actively maintained and already released in the form to be
+     signed.
+   - Every release requires manual approval in their dashboard before
+     signing -- no fully unattended CI signing.
 
 4. **Wait for review.** Typically a few business days. They sanity-check
-   the repo (real project, OSI license, no malware indicators).
+   the repo (real project, OSI license, no malware indicators, active
+   commits).
 
 5. **Once approved:**
    - Create a **Project** in SignPath tied to this repo.
