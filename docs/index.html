@@ -227,6 +227,12 @@
       <li><a href="#ref-tradeoffs">Trade-offs</a></li>
     </ul>
 
+    <h3>Linting deep dive</h3>
+    <ul>
+      <li><a href="#lint-what">What linting is</a></li>
+      <li><a href="#lint-how">How we use it here</a></li>
+    </ul>
+
     <h3>Acknowledgements</h3>
     <ul>
       <li><a href="#credits">Credits &amp; third-party</a></li>
@@ -1991,6 +1997,163 @@ TryInvokeNoArgs(viewContent, <span class="tok-s">"OnIsDirtyChanged"</span>, nonP
     The net effect: we trade compile-time safety for <strong>portability + access to non-public
     members</strong>, which was essential because the entire value proposition of this add-in is
     <em>write back to a live dictionary that was never designed for third-party mutation</em>.
+  </p>
+</article>
+
+<!-- ====================== LINTING DEEP DIVE ====================== -->
+
+<article id="lint-what">
+  <span class="kicker">Linting deep dive · chapter 1</span>
+  <h2>What linting is</h2>
+  <p>
+    A <strong>linter</strong> is a tool that reads code or data <em>without running it</em> and
+    reports things that are likely to be wrong — not compile errors the compiler would already
+    catch, but the layer above that: violations of style, naming, structure, or correctness
+    patterns that a human reviewer would flag. The name comes from a 1978 Bell Labs utility
+    called <code>lint</code>, which scanned C code for suspicious constructs the compiler
+    accepted but a careful programmer wouldn't write.
+  </p>
+  <p>
+    Modern linters all share the same three-part shape:
+  </p>
+  <ol>
+    <li><strong>A parser / model</strong> — something that turns the raw input into a
+        structured object the rules can walk. For ESLint that's a JavaScript AST; for
+        Dictionary Tasker that's the live <code>DDDataDictionary</code> object graph.</li>
+    <li><strong>A set of rules</strong> — each one inspects the model and emits zero or
+        more <em>findings</em>. A finding has a <strong>severity</strong>
+        (Error / Warning / Info), a <strong>rule id</strong>, a <strong>location</strong>
+        (table, field, key), and a <strong>message</strong> explaining why it was flagged.</li>
+    <li><strong>A reporter</strong> — groups findings by severity or location and hands
+        them to the user.</li>
+  </ol>
+  <p>
+    A linter is deliberately narrower than a compiler: it accepts input the compiler already
+    accepted and <em>still</em> complains. It is also narrower than a test suite: it reasons
+    about <em>shape</em>, not about <em>behaviour</em>. A field with a missing picture is not
+    a crash, it's a smell — the compiler will happily build, the app will happily run, but
+    something downstream (a report, an import, a migration) will eventually misbehave because
+    the dictionary declared the field incompletely. Linting is the early-warning net for
+    exactly that kind of drift.
+  </p>
+  <div class="callout">
+    <strong>Lint vs. validation.</strong> The two terms overlap. In this manual we use
+    <em>validation</em> for rules that say "this is provably wrong — an SQL driver will
+    reject it" (e.g. <code>:</code> in an ExternalName) and <em>lint</em> for rules that say
+    "this is suspicious — you probably want to fix it" (e.g. a field with no description).
+    Both live in the same report, distinguished by severity.
+  </div>
+</article>
+
+<article id="lint-how">
+  <span class="kicker">Linting deep dive · chapter 2</span>
+  <h2>How we use linting here</h2>
+  <p>
+    Dictionary Tasker treats the open <code>.DCT</code> as the source being linted. The
+    model is the live <code>DDDataDictionary</code> reached through reflection (see the
+    <a href="#ref-what">Reflection deep dive</a>); rules live in
+    <code>LintEngine.cs</code> (with repair UIs in <code>LintReportDialog.cs</code>,
+    <code>LintFixItDialog.cs</code>, and <code>LintFixKeysDialog.cs</code>); the reporter is the Lint report window
+    with its severity groups and filter box.
+  </p>
+
+  <h3>What the rules look like</h3>
+  <p>
+    Each rule is a small function that walks some slice of the model and yields findings.
+    A simplified shape:
+  </p>
+  <pre><code class="lang-csharp"><span class="tok-k">foreach</span> (<span class="tok-k">var</span> table <span class="tok-k">in</span> dict.Tables)
+<span class="tok-k">foreach</span> (<span class="tok-k">var</span> field <span class="tok-k">in</span> table.Fields)
+{
+    <span class="tok-k">if</span> (<span class="tok-t">string</span>.IsNullOrWhiteSpace(field.Description))
+        yield <span class="tok-k">return</span> <span class="tok-k">new</span> <span class="tok-t">Finding</span>(
+            <span class="tok-t">Severity</span>.Info,
+            <span class="tok-s">"missing-description"</span>,
+            table, field,
+            <span class="tok-s">"Field has no description — consider adding one."</span>);
+}</code></pre>
+  <p>
+    Rule ids are stable, hyphenated strings (<code>missing-description</code>,
+    <code>illegal-external-name</code>, <code>duplicate-external-name</code>,
+    <code>long-external-name</code>, <code>unusual-external-name-chars</code>,
+    <code>picture-mismatch</code>, …). They show up in findings and are what we mention in
+    release notes when a rule changes.
+  </p>
+
+  <h3>Severity assignment</h3>
+  <table>
+    <thead><tr><th>Severity</th><th>Meaning</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Error</strong></td>
+          <td>The SQL driver or Clarion runtime will actively reject this.</td>
+          <td><code>:</code> in an ExternalName; duplicate ExternalName across two keys.</td></tr>
+      <tr><td><strong>Warning</strong></td>
+          <td>Legal but fragile — works today, breaks on the next porting step.</td>
+          <td>ExternalName starts with a digit; exceeds the driver's identifier length limit.</td></tr>
+      <tr><td><strong>Info</strong></td>
+          <td>Style / completeness; purely advisory.</td>
+          <td>Missing description, money-ish label without an <code>@n$</code> picture.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The three-tier split matters because it drives the <strong>fix-first</strong> workflow:
+    Errors must be cleared before a new SQL backend will even accept the schema; Warnings
+    are the "do before production" bucket; Infos are ongoing housekeeping.
+  </p>
+
+  <h3>Where linting shows up in the UI</h3>
+  <ul>
+    <li><strong>Lint report</strong> (full dictionary) — findings grouped by severity with
+        a substring filter and click-through to the offending field / key.</li>
+    <li><strong>Lint this table...</strong> — the same engine restricted to one table;
+        available from right-click on the Tables list, Tree view, and Relations diagram.
+        Cross-table rules (duplicate ExternalName) still run so single-table scope can
+        surface collisions caused by other tables.</li>
+    <li><strong>Fix fields... / Fix keys...</strong> — the <em>repair</em> side of lint.
+        The same findings are re-rendered as a <code>DataGridView</code> with the editable
+        columns (Description / Picture / ExternalName) exposed inline. Auto-fill strategies
+        translate one finding into one suggested value per row without committing until you
+        click Apply.</li>
+    <li><strong>Picture consistency</strong> and <strong>Naming conventions</strong> —
+        narrower rule sets broken out as their own tools for dictionaries where those are
+        the only concern.</li>
+  </ul>
+
+  <h3>Driver awareness</h3>
+  <p>
+    Several rules are <em>parameterised by driver</em> because "legal" depends on where the
+    schema is going. The ExternalName length rule reads the table's
+    <code>FileDriverName</code> and picks the right cap:
+  </p>
+  <table>
+    <thead><tr><th>Driver</th><th>Max identifier length</th></tr></thead>
+    <tbody>
+      <tr><td>PostgreSQL</td><td>63</td></tr>
+      <tr><td>MySQL / MariaDB</td><td>64</td></tr>
+      <tr><td>MSSQL / SQLite</td><td>128</td></tr>
+    </tbody>
+  </table>
+  <p>
+    A 70-character key name is an Error against Postgres and silent against MSSQL. Running
+    the lint against <em>the driver the dictionary actually declares</em> is the difference
+    between a useful report and noise.
+  </p>
+
+  <h3>The round-trip we're aiming for</h3>
+  <ol>
+    <li><strong>Scan</strong> — open Lint report, see the full list.</li>
+    <li><strong>Triage</strong> — filter by severity or substring; decide what's in scope
+        for this pass.</li>
+    <li><strong>Repair in bulk</strong> — launch Fix fields / Fix keys, apply an auto-fill
+        strategy, review the amber-tinted dirty cells, Apply.</li>
+    <li><strong>Rescan</strong> — the report re-runs against the now-mutated dictionary;
+        anything still flagged goes back through the loop.</li>
+  </ol>
+  <p>
+    Because every mutation goes through the same reflection path Safe rename uses, and every
+    mutation is preceded by a timestamped <code>.tasker-bak-&lt;timestamp&gt;</code> copy of
+    the <code>.DCT</code>, the round-trip is safe to attempt on a real dictionary — the
+    failure mode is "revert the backup", not "lose work".
   </p>
 </article>
 
