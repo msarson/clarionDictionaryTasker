@@ -76,7 +76,7 @@ namespace ClarionDctAddin
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 9F)
             };
-            cboDialect.Items.AddRange(new object[] { "SQL Server", "PostgreSQL", "SQLite", "MySQL", "MariaDB" });
+            cboDialect.Items.AddRange(new object[] { "SQL Server", "PostgreSQL", "SQLite", "MySQL", "MariaDB", "Oracle", "Firebird" });
             // Load the remembered dialect as the starting selection.
             int preferredIdx = (int)Settings.PreferredDialect;
             cboDialect.SelectedIndex = (preferredIdx >= 0 && preferredIdx < cboDialect.Items.Count) ? preferredIdx : 0;

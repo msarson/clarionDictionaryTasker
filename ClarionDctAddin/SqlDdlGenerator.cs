@@ -7,11 +7,12 @@ using System.Text;
 namespace ClarionDctAddin
 {
     // Generates CREATE TABLE + CREATE INDEX statements for every table in an
-    // open Clarion dictionary. Supports three dialects: SQL Server, PostgreSQL,
-    // and SQLite. Strictly read-only; no dictionary mutation.
+    // open Clarion dictionary. Dialects: SQL Server, PostgreSQL, SQLite,
+    // MySQL, MariaDB, Oracle, Firebird. Strictly read-only; no dictionary
+    // mutation.
     internal static class SqlDdlGenerator
     {
-        public enum Dialect { SqlServer, Postgres, SQLite, MySql, MariaDb }
+        public enum Dialect { SqlServer, Postgres, SQLite, MySql, MariaDb, Oracle, Firebird }
 
         public sealed class Options
         {
@@ -166,36 +167,59 @@ namespace ClarionDctAddin
                 return "DATE";
 
             bool isMySqlFamily = dialect == Dialect.MySql || dialect == Dialect.MariaDb;
+            bool isOracle     = dialect == Dialect.Oracle;
+            bool isFirebird   = dialect == Dialect.Firebird;
+
+            // Oracle has no plain VARCHAR (it's deprecated / aliased),
+            // Firebird keeps VARCHAR(n) but has a much smaller default limit.
+            string varcharBase = isOracle ? "VARCHAR2" : "VARCHAR";
 
             switch (upperType)
             {
                 case "STRING":
-                    return "VARCHAR(" + Clamp(chars > 0 ? chars : size, 1, 8000) + ")";
+                    return varcharBase + "(" + Clamp(chars > 0 ? chars : size, 1, 8000) + ")";
                 case "CSTRING":
-                    return "VARCHAR(" + Clamp(size > 0 ? size - 1 : chars, 1, 8000) + ")";
+                    return varcharBase + "(" + Clamp(size > 0 ? size - 1 : chars, 1, 8000) + ")";
                 case "PSTRING":
-                    return "VARCHAR(" + Clamp(size > 0 ? size - 1 : chars, 1, 8000) + ")";
+                    return varcharBase + "(" + Clamp(size > 0 ? size - 1 : chars, 1, 8000) + ")";
                 case "BYTE":
-                    return (dialect == Dialect.SqlServer || isMySqlFamily) ? "TINYINT" : "SMALLINT";
-                case "SHORT":
+                    if (dialect == Dialect.SqlServer || isMySqlFamily) return "TINYINT";
+                    if (isOracle) return "NUMBER(3)";
                     return "SMALLINT";
+                case "SHORT":
+                    return isOracle ? "NUMBER(5)" : "SMALLINT";
                 case "USHORT":
+                    if (isOracle) return "NUMBER(5)";
                     return "INT";
                 case "LONG":
-                    return dialect == Dialect.SQLite ? "INTEGER" : "INT";
+                    if (isOracle)               return "NUMBER(10)";
+                    if (dialect == Dialect.SQLite) return "INTEGER";
+                    if (isFirebird)             return "INTEGER";
+                    return "INT";
                 case "ULONG":
+                    if (isOracle)   return "NUMBER(19)";
                     return "BIGINT";
                 case "REAL":
-                    if (dialect == Dialect.Postgres)   return "DOUBLE PRECISION";
-                    if (isMySqlFamily)                 return "DOUBLE";
+                    if (dialect == Dialect.Postgres) return "DOUBLE PRECISION";
+                    if (isMySqlFamily)               return "DOUBLE";
+                    if (isOracle)                    return "BINARY_DOUBLE";
+                    if (isFirebird)                  return "DOUBLE PRECISION";
                     return "FLOAT";
                 case "SREAL":
-                    return isMySqlFamily ? "FLOAT" : "REAL";
+                    if (isMySqlFamily) return "FLOAT";
+                    if (isOracle)      return "BINARY_FLOAT";
+                    if (isFirebird)    return "FLOAT";
+                    return "REAL";
                 case "BFLOAT4":
-                    return isMySqlFamily ? "FLOAT" : "REAL";
+                    if (isMySqlFamily) return "FLOAT";
+                    if (isOracle)      return "BINARY_FLOAT";
+                    if (isFirebird)    return "FLOAT";
+                    return "REAL";
                 case "BFLOAT8":
-                    if (dialect == Dialect.Postgres)   return "DOUBLE PRECISION";
-                    if (isMySqlFamily)                 return "DOUBLE";
+                    if (dialect == Dialect.Postgres) return "DOUBLE PRECISION";
+                    if (isMySqlFamily)               return "DOUBLE";
+                    if (isOracle)                    return "BINARY_DOUBLE";
+                    if (isFirebird)                  return "DOUBLE PRECISION";
                     return "FLOAT";
                 case "DECIMAL":
                 case "PDECIMAL":
@@ -203,11 +227,17 @@ namespace ClarionDctAddin
                     int precision = (int)(chars > 0 ? chars : 10);
                     int scale     = Math.Max(0, places);
                     if (scale > precision) scale = precision;
+                    // Oracle uses NUMBER(p,s). Firebird keeps DECIMAL(p,s).
+                    if (isOracle) return "NUMBER(" + precision + "," + scale + ")";
                     return "DECIMAL(" + precision + "," + scale + ")";
                 }
                 case "DATE":
+                    // Oracle's DATE also holds a time component; it's the
+                    // natural pick here because that's how Clarion programs
+                    // treat it when stored as a real DATE.
                     return "DATE";
                 case "TIME":
+                    if (isOracle) return "TIMESTAMP";   // Oracle has no plain TIME
                     return "TIME";
                 case "MEMO":
                     switch (dialect)
@@ -216,6 +246,8 @@ namespace ClarionDctAddin
                         case Dialect.Postgres:  return "TEXT";
                         case Dialect.MySql:
                         case Dialect.MariaDb:   return "LONGTEXT";
+                        case Dialect.Oracle:    return "CLOB";
+                        case Dialect.Firebird:  return "BLOB SUB_TYPE TEXT";
                         default:                return "TEXT";
                     }
                 case "BLOB":
@@ -225,12 +257,19 @@ namespace ClarionDctAddin
                         case Dialect.Postgres:  return "BYTEA";
                         case Dialect.MySql:
                         case Dialect.MariaDb:   return "LONGBLOB";
+                        case Dialect.Oracle:    return "BLOB";
+                        case Dialect.Firebird:  return "BLOB SUB_TYPE BINARY";
                         default:                return "BLOB";
                     }
                 case "GROUP":
-                    return "/* GROUP - manual */ " + (dialect == Dialect.SqlServer ? "NVARCHAR(100)" : "VARCHAR(100)");
+                {
+                    var fallback = isOracle
+                        ? "VARCHAR2(100)"
+                        : (dialect == Dialect.SqlServer ? "NVARCHAR(100)" : "VARCHAR(100)");
+                    return "/* GROUP - manual */ " + fallback;
+                }
             }
-            return "/* " + t + " */ VARCHAR(50)";
+            return "/* " + t + " */ " + varcharBase + "(50)";
         }
 
         // ---------------- helpers ----------------
@@ -246,8 +285,50 @@ namespace ClarionDctAddin
                 case Dialect.MySql:
                 case Dialect.MariaDb:
                     return "DROP TABLE IF EXISTS " + QuoteIdent(tableName, dialect) + ";";
+                case Dialect.Oracle:
+                {
+                    // Anonymous PL/SQL block: DROP TABLE ..., swallow the "table does not
+                    // exist" error (-942), re-raise anything else. Works on every
+                    // supported Oracle version; run with SQL*Plus using "/" as terminator.
+                    return "BEGIN\r\n"
+                         + "  EXECUTE IMMEDIATE 'DROP TABLE " + QuoteIdent(tableName, dialect) + " CASCADE CONSTRAINTS PURGE';\r\n"
+                         + "EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF;\r\n"
+                         + "END;\r\n"
+                         + "/";
+                }
+                case Dialect.Firebird:
+                {
+                    // DROP TABLE IF EXISTS is Firebird 4.0+. For 2.5/3.0 compatibility
+                    // wrap in an EXECUTE BLOCK that checks the system catalog first.
+                    // isql needs "SET TERM" so the inner semicolons aren't parsed as
+                    // statement ends — we restore ';' right after.
+                    var qualified = QuoteIdent(tableName, dialect);
+                    var bareUpper = BareForFirebirdCatalog(tableName);
+                    return "SET TERM ^ ;\r\n"
+                         + "EXECUTE BLOCK AS BEGIN\r\n"
+                         + "  IF (EXISTS (SELECT 1 FROM RDB$RELATIONS WHERE RDB$RELATION_NAME = '" + bareUpper + "')) THEN\r\n"
+                         + "    EXECUTE STATEMENT 'DROP TABLE " + qualified + "';\r\n"
+                         + "END^\r\n"
+                         + "SET TERM ; ^";
+                }
             }
             return "";
+        }
+
+        // Firebird stores relation names in upper-case when the source identifier
+        // was unquoted; quoted identifiers preserve their case. For the catalog
+        // lookup in the conditional DROP we need to present the same byte pattern
+        // that's actually on disk — trim one outer level of quoting if present,
+        // and uppercase the rest when it looks like a plain identifier.
+        static string BareForFirebirdCatalog(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            // Strip any schema/owner prefix — Firebird has no schemas per se.
+            var dot = name.LastIndexOf('.');
+            if (dot >= 0 && dot < name.Length - 1) name = name.Substring(dot + 1);
+            if (name.Length >= 2 && name[0] == '"' && name[name.Length - 1] == '"')
+                return name.Substring(1, name.Length - 2).Replace("'", "''");
+            return name.ToUpperInvariant().Replace("'", "''");
         }
 
         static string QuoteIdent(string name, Dialect dialect)
@@ -269,7 +350,9 @@ namespace ClarionDctAddin
             {
                 case Dialect.SqlServer: return "[" + name + "]";
                 case Dialect.Postgres:
-                case Dialect.SQLite:    return "\"" + name + "\"";
+                case Dialect.SQLite:
+                case Dialect.Oracle:
+                case Dialect.Firebird:  return "\"" + name.Replace("\"", "\"\"") + "\"";
                 case Dialect.MySql:
                 case Dialect.MariaDb:   return "`" + name.Replace("`", "``") + "`";
             }

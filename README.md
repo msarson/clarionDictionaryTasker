@@ -61,7 +61,7 @@ A SharpDevelop add-in for **Clarion 10, 11, 11.1, and 12 IDEs** that inspects th
   - **Embed TopScan** / **Open in TopScan** — SoftVelocity's own TPS viewer, either reparented into the dialog via Win32 `SetParent` or launched as a separate process. Always available as a fallback for edge-case TPS files the parser doesn't know how to decode.
 
 ### Generation & export
-- **SQL DDL export** — live preview window, 5 dialects (SQL Server, PostgreSQL, SQLite, MySQL, MariaDB). Whole dictionary or single table. Remembers the preferred dialect.
+- **SQL DDL export** — live preview window, 7 dialects (SQL Server, PostgreSQL, SQLite, MySQL, MariaDB, Oracle, Firebird). Whole dictionary or single table. Oracle maps to `VARCHAR2`/`NUMBER`/`CLOB` and emits a PL/SQL block for conditional DROP; Firebird uses `BLOB SUB_TYPE TEXT` for memos and wraps the DROP in an `EXECUTE BLOCK` with `SET TERM` so isql runs it as-is. Remembers the preferred dialect.
 - **Model classes** — emit one class/interface per table in **C#** (PascalCase POCOs with XML doc comments) or **TypeScript** (camelCase `export interface`s with JSDoc). Live preview, namespace option, Copy/Save.
 - **Markdown documentation** — single-document reference (tables, fields, keys, relations) with optional TOC. Copy or save as `.md`.
 - **JSON export** — one table, selected tables, or the whole dictionary.
