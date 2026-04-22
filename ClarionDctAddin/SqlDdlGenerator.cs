@@ -83,7 +83,11 @@ namespace ClarionDctAddin
             sb.AppendLine("CREATE TABLE " + QuoteIdent(sqlName, opt.Dialect) + " (");
 
             var fields = DictModel.GetProp(table, "Fields") as IEnumerable;
-            var lines = new List<string>();
+            // Each line is kept as (code, trailing-comment) so the comma that
+            // separates columns can be inserted BETWEEN them — otherwise it
+            // ends up glued onto the end of the comment and the SQL parser
+            // silently drops the field separator.
+            var lines = new List<Tuple<string, string>>();
             var pkCols = GetKeyColumnLabels(GetPrimaryKeyObject(table));
 
             if (fields != null)
@@ -92,30 +96,38 @@ namespace ClarionDctAddin
                 {
                     if (f == null) continue;
                     var flabel = DictModel.AsString(DictModel.GetProp(f, "Label")) ?? "?";
-                    var line   = "  " + PadRight(QuoteIdent(flabel, opt.Dialect), 32) + " "
+                    var code   = "  " + PadRight(QuoteIdent(flabel, opt.Dialect), 32) + " "
                                + PadRight(MapType(f, opt.Dialect), 18);
 
                     bool isPk = pkCols.Any(c => string.Equals(c, flabel, StringComparison.OrdinalIgnoreCase));
-                    if (pkCols.Count == 1 && isPk) line += " NOT NULL";
+                    if (pkCols.Count == 1 && isPk) code += " NOT NULL";
 
+                    string comment = "";
                     if (opt.IncludeComments)
                     {
                         var desc = DictModel.AsString(DictModel.GetProp(f, "Description")) ?? "";
                         if (!string.IsNullOrEmpty(desc))
-                            line += "  -- " + desc.Replace("\r", " ").Replace("\n", " ");
+                            comment = desc.Replace("\r", " ").Replace("\n", " ");
                     }
-                    lines.Add(line);
+                    lines.Add(Tuple.Create(code, comment));
                 }
             }
 
             if (pkCols.Count > 0)
             {
                 var quoted = pkCols.Select(c => QuoteIdent(c, opt.Dialect));
-                lines.Add("  CONSTRAINT " + QuoteIdent("PK_" + label, opt.Dialect)
-                    + " PRIMARY KEY (" + string.Join(", ", quoted.ToArray()) + ")");
+                lines.Add(Tuple.Create(
+                    "  CONSTRAINT " + QuoteIdent("PK_" + label, opt.Dialect)
+                    + " PRIMARY KEY (" + string.Join(", ", quoted.ToArray()) + ")",
+                    ""));
             }
 
-            sb.AppendLine(string.Join(",\r\n", lines.ToArray()));
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var sep = (i < lines.Count - 1) ? "," : "";
+                var commentPart = string.IsNullOrEmpty(lines[i].Item2) ? "" : "  -- " + lines[i].Item2;
+                sb.AppendLine(lines[i].Item1 + sep + commentPart);
+            }
             sb.AppendLine(");");
 
             if (opt.IncludeIndexes)
