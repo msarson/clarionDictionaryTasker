@@ -10,6 +10,10 @@ namespace ClarionDctAddin
     internal static class Settings
     {
         const string KeyPreferredDialect = "preferred_sql_dialect";
+        const string KeyDdlDropTable       = "ddl_include_drop_table";
+        const string KeyDdlIncludeIndexes  = "ddl_include_indexes";
+        const string KeyDdlIncludeComments = "ddl_include_comments";
+        const string KeyDdlUseFullPathName = "ddl_use_full_path_name";
         const string KeyFixKeysStyle     = "fix_keys_style";
         const string KeyFixKeysOwner     = "fix_keys_owner";
         const string KeyFixKeysKey       = "fix_keys_key";
@@ -170,6 +174,11 @@ namespace ClarionDctAddin
         public static bool GlobalSearchRelations    { get { return GetBool(KeyGlobalSearchRelations,    true); } set { SetBool(KeyGlobalSearchRelations, value); } }
         public static bool GlobalSearchTriggers     { get { return GetBool(KeyGlobalSearchTriggers,     true); } set { SetBool(KeyGlobalSearchTriggers, value); } }
         public static bool GlobalSearchDescriptions { get { return GetBool(KeyGlobalSearchDescriptions, true); } set { SetBool(KeyGlobalSearchDescriptions, value); } }
+
+        public static bool DdlIncludeDropTable { get { return GetBool(KeyDdlDropTable,       true); } set { SetBool(KeyDdlDropTable,       value); } }
+        public static bool DdlIncludeIndexes   { get { return GetBool(KeyDdlIncludeIndexes,  true); } set { SetBool(KeyDdlIncludeIndexes,  value); } }
+        public static bool DdlIncludeComments  { get { return GetBool(KeyDdlIncludeComments, true); } set { SetBool(KeyDdlIncludeComments, value); } }
+        public static bool DdlUseFullPathName  { get { return GetBool(KeyDdlUseFullPathName, true); } set { SetBool(KeyDdlUseFullPathName, value); } }
 
         public static SqlDdlGenerator.Dialect PreferredDialect
         {

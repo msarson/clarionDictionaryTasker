@@ -88,10 +88,14 @@ namespace ClarionDctAddin
                 Regenerate();
             };
 
-            chkDrop     = MakeCheck("Drop if exists",     240, 10, true);
-            chkIndexes  = MakeCheck("Include indexes",    390, 10, true);
-            chkComments = MakeCheck("Include comments",   540, 10, true);
-            chkFullPath = MakeCheck("Use full path name", 700, 10, true);
+            chkDrop     = MakeCheck("Drop if exists",     240, 10, Settings.DdlIncludeDropTable,
+                                    delegate(bool on) { Settings.DdlIncludeDropTable = on; });
+            chkIndexes  = MakeCheck("Include indexes",    390, 10, Settings.DdlIncludeIndexes,
+                                    delegate(bool on) { Settings.DdlIncludeIndexes = on; });
+            chkComments = MakeCheck("Include comments",   540, 10, Settings.DdlIncludeComments,
+                                    delegate(bool on) { Settings.DdlIncludeComments = on; });
+            chkFullPath = MakeCheck("Use full path name", 700, 10, Settings.DdlUseFullPathName,
+                                    delegate(bool on) { Settings.DdlUseFullPathName = on; });
 
             var btnRegen = new Button { Text = "Regenerate", Top = 4, Width = 110, Height = 30, FlatStyle = FlatStyle.System, Anchor = AnchorStyles.Top | AnchorStyles.Right };
             btnRegen.Left = toolbar.ClientSize.Width - btnRegen.Width - 16;
@@ -136,7 +140,7 @@ namespace ClarionDctAddin
             CancelButton = btnClose;
         }
 
-        CheckBox MakeCheck(string text, int left, int top, bool on)
+        CheckBox MakeCheck(string text, int left, int top, bool on, Action<bool> persist)
         {
             var c = new CheckBox
             {
@@ -147,7 +151,12 @@ namespace ClarionDctAddin
                 AutoSize = true,
                 Font = new Font("Segoe UI", 9F)
             };
-            c.CheckedChanged += delegate { if (!inSetup) Regenerate(); };
+            c.CheckedChanged += delegate
+            {
+                if (inSetup) return;
+                if (persist != null) persist(c.Checked);
+                Regenerate();
+            };
             return c;
         }
 
