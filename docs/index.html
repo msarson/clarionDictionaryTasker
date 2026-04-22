@@ -414,6 +414,16 @@
     and Description. Double-click a row to open the field browser for that table. The bottom button
     strip also lets you export the selected table or all tables to JSON.
   </p>
+  <div class="callout">
+    <strong>Aliases are included.</strong> Clarion stores aliases under each base table's
+    <code>.Aliases</code> sub-collection (and sometimes also on a top-level
+    <code>dict.Aliases</code>) — <code>dict.Tables</code> alone misses them. The add-in's
+    <code>DictModel.GetTables</code> flattens both paths in, de-duped by reference, so
+    Browse tables / Tree / DDL / Markdown / JSON / Compare all surface alias rows alongside
+    their base tables. Write-mutation dialogs carry a separate <em>Exclude aliases</em>
+    checkbox (on by default) so you don't accidentally double-write shared field/key objects
+    — see <a href="#tools-refactor">Refactoring</a>.
+  </div>
   <h4>Filter bar</h4>
   <p>
     Above the list:
@@ -1169,11 +1179,29 @@
 
   <h3>SQL DDL export</h3>
   <p>
-    Live-preview dialog that emits <code>CREATE TABLE</code> + index statements in five dialects:
+    Live-preview dialog that emits <code>CREATE TABLE</code> + index statements in seven dialects:
     <strong>SQL Server</strong>, <strong>PostgreSQL</strong>, <strong>SQLite</strong>,
-    <strong>MySQL</strong>, and <strong>MariaDB</strong>. The preview textbox re-renders
-    instantly on dialect change. Save as <code>.sql</code> or copy to clipboard. The chosen
-    dialect persists across launches via <code>%LOCALAPPDATA%\ClarionDctAddin\settings.txt</code>.
+    <strong>MySQL</strong>, <strong>MariaDB</strong>, <strong>Oracle</strong>, and
+    <strong>Firebird</strong>. The preview textbox re-renders instantly on dialect change.
+    Save as <code>.sql</code> or copy to clipboard.
+  </p>
+  <ul>
+    <li><strong>Oracle</strong> maps strings to <code>VARCHAR2(n)</code>, integers to
+        <code>NUMBER(3)</code> … <code>NUMBER(19)</code>, memos to <code>CLOB</code>, reals
+        to <code>BINARY_FLOAT</code>/<code>BINARY_DOUBLE</code>. Conditional <code>DROP</code> is
+        emitted as an anonymous PL/SQL block that swallows <code>ORA-00942</code> and re-raises
+        anything else, terminated with <code>/</code> for SQL*Plus.</li>
+    <li><strong>Firebird</strong> maps memos to <code>BLOB SUB_TYPE TEXT</code>, binary BLOBs
+        to <code>BLOB SUB_TYPE BINARY</code>, keeps <code>INTEGER</code>/<code>DOUBLE
+        PRECISION</code>/<code>DECIMAL(p,s)</code>. Conditional <code>DROP</code> is wrapped
+        in an <code>EXECUTE BLOCK</code> that checks <code>RDB$RELATIONS</code> first — works
+        on Firebird 2.5+. Paired <code>SET TERM ^ ;</code> / <code>SET TERM ; ^</code> wrap
+        each drop so isql / FlameRobin runs the script untouched.</li>
+  </ul>
+  <p>
+    The four toolbar checkboxes (Drop-if-exists, Include indexes, Include comments, Use full
+    path name) all persist alongside the dialect across launches, via
+    <code>%LOCALAPPDATA%\ClarionDctAddin\settings.txt</code>.
   </p>
   <p>
     Also exposed as <strong>right-click → Export SQL DDL</strong> on the Tables list / Tree /
@@ -1246,6 +1274,49 @@
     <code>FieldSize</code>, and / or <code>ScreenPicture</code>. Any of the three target values
     can be blank, meaning "preserve the current value". Preview lists
     <code>before → after</code> per affected field.
+  </p>
+
+  <h3>Batch clear key external names</h3>
+  <p>
+    Mass-wipe the <code>EXTERNAL NAME</code> on every key in a selection of tables. For
+    projects that don't target a SQL backend (pure TPS, or SQL drivers that don't need
+    explicit index names) the per-key external name is dead weight — this tool removes it
+    in one pass.
+  </p>
+  <ul>
+    <li>Left pane: the table list with a filter box plus <em>Keys</em> / <em>Named</em>
+        columns (how many keys the table has, and how many currently have a non-blank
+        external name).</li>
+    <li>Right pane: auto-refreshed preview of every key the apply step will touch —
+        shows <code>Table · Key · current external name</code> so you can confirm the plan
+        before committing.</li>
+    <li>Routes through the same <code>FieldMutator.SetStringProp</code> path as Fix keys,
+        which means the native save pipeline sees the edits and the <em>Save</em> button
+        lights up. The <code>.DCT</code> is backed up first.</li>
+  </ul>
+
+  <h3>Aliases in write tools</h3>
+  <p>
+    Clarion aliases <em>share</em> their <code>Fields</code> and <code>Keys</code>
+    collections with the base table they're aliasing — the alias row exposes the
+    same <code>DDField</code> / <code>DDKey</code> object instances. Before this was handled,
+    applying a batch that touched both the base and its alias meant writing the same
+    underlying object twice in one pass.
+  </p>
+  <p>
+    Every write dialog (Batch copy fields, Batch copy keys, Batch clear key external names,
+    Batch rename, Batch retype fields, Standard audit pack) therefore carries an
+    <strong>Exclude aliases</strong> checkbox, defaulting on. Fix fields and Fix keys honour
+    the same global preference silently. Rows kept visible when the box is unchecked are
+    tagged <code>(alias)</code> after the table name so the user can tell at a glance.
+  </p>
+  <p>
+    Alias-ness itself is detected through multiple probes (recorded when a table was
+    flattened out of a base's <code>.Aliases</code> sub-collection, plus fallbacks across
+    <code>IsAlias</code>, <code>AliasOf</code>, <code>AliasedFile</code>, <code>BaseFile</code>,
+    <code>Kind</code>/<code>FileKind</code>/<code>Type</code>, and finally the runtime type
+    name) — any hit returns true, so even Clarion builds that surface aliases differently
+    still get filtered.
   </p>
 
   <h3>Standard audit pack</h3>
@@ -1373,7 +1444,14 @@ R     &lt;name&gt;  &lt;related-table&gt;
       <tr><td><strong>Browse tables — Tables tab</strong></td>
           <td>Sort column index + ascending/descending.</td></tr>
       <tr><td><strong>SQL DDL export</strong></td>
-          <td>Preferred dialect (MSSQL / Postgres / SQLite / MySQL / MariaDB).</td></tr>
+          <td>Preferred dialect (MSSQL / Postgres / SQLite / MySQL / MariaDB / Oracle /
+              Firebird) + the four toolbar checkboxes (Drop-if-exists, Include indexes,
+              Include comments, Use full path name).</td></tr>
+      <tr><td><strong>Batch write dialogs</strong></td>
+          <td>Shared <em>Exclude aliases</em> flag — toggling it in any of Batch copy
+              fields / keys, Batch clear key external names, Batch rename, Batch retype,
+              Standard audit pack, Fix fields, Fix keys updates the same
+              <code>batch_exclude_aliases</code> key. Default on.</td></tr>
       <tr><td><strong>JSON preview</strong></td>
           <td>Last view style (Pretty 2sp / 4sp / Tabs / Minified / Tree / Table / YAML / Paths / Schema).</td></tr>
       <tr><td><strong>Model classes</strong></td>

@@ -6,7 +6,7 @@ A SharpDevelop add-in for **Clarion 10, 11, 11.1, and 12 IDEs** that inspects th
 
 ### Browse & navigate
 - **Launcher** — tiled home screen with quick access to the main views and the full tools catalogue.
-- **Browse tables** — modal list with driver / prefix / field count / description. Click-to-sort columns (numeric for Fields/Keys, string-insensitive elsewhere), incremental text filter, Driver dropdown, and a live count label. Right-click any row for per-table actions: **Show fields**, **Export to JSON**, **Export SQL DDL**, **Lint this table**, **Fix fields**.
+- **Browse tables** — modal list with driver / prefix / field count / description. Click-to-sort columns (numeric for Fields/Keys, string-insensitive elsewhere), incremental text filter, Driver dropdown, and a live count label. Aliases are listed alongside base tables (they live under each table's `.Aliases` sub-collection, which `DictModel.GetTables` flattens in). Right-click any row for per-table actions: **Show fields**, **Export to JSON**, **Export SQL DDL**, **Lint this table**, **Fix fields**.
 - **Show fields** — per-table column view (`Name`, `Type`, `Size`, `Places`, `Picture`, `Heading`, `Prompt`, `Description`, `External name`, ...).
 - **Tree view** — hierarchical dictionary → tables → Fields / Keys / Relations / Triggers → leaf properties. Lazy-loaded for large dictionaries.
 - **Relations diagram** — auto-laid-out boxes-and-arrows chart.
@@ -50,6 +50,7 @@ A SharpDevelop add-in for **Clarion 10, 11, 11.1, and 12 IDEs** that inspects th
 - **Batch retype fields** — select every field whose label matches a regex, change type / size / picture in one shot. Any field blank means "preserve". Preview + apply with backup.
 - **Standard audit pack** — pick a TEMPLATE TABLE that already has the audit fields defined (Guid + CreatedOn/By + ModifiedOn/By + DeletedOn). The tool auto-matches those labels against the template and stamps them onto every selected target table via the proven Batch-copy-fields path. `.DCT` backed up first. Optional Markdown recipe export.
 - **Batch clear key external names** — pick one or many tables and wipe the `EXTERNAL NAME` on every key in them. For projects with no SQL backend the per-key external name is noise. Filter the table list, multi-check, preview the list of keys that will be touched, then apply with `.DCT` backup.
+- **Alias handling** — every write dialog above carries an **Exclude aliases** checkbox (default ON). Clarion aliases share the same `DDField`/`DDKey` objects as their base tables, so touching both in one batch writes the same underlying object twice. The flag persists globally across sessions, rows kept visible when unchecked are tagged `(alias)`, and detection falls through multiple probes (`IsAlias`, `AliasOf`/`AliasedFile`/`BaseFile` refs, `Kind`/`FileKind`/`Type` enum, runtime type name) so differently-wired Clarion builds still get filtered.
 
 ### Enterprise glue
 - **Git commit hook** — detects the repo root, shows `git status` for the `.DCT`, seeds a commit message, commits and optionally pushes. Manual rather than auto-on-save, for reliability across Clarion 12 point releases.
