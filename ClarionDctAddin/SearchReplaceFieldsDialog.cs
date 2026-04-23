@@ -30,14 +30,22 @@ namespace ClarionDctAddin
         static readonly Color SectionColor= Color.FromArgb(45,  90, 135);
 
         readonly object dict;
+        readonly List<object> tables;
+
+        const string AllDriversLabel = "(all drivers)";
+
+        // Tables pane
+        ListView lvTables;
+        TextBox  txtTableFilter;
+        ComboBox cboDriverFilter;
+        CheckBox chkExcludeAliases;
+        Label    lblTablesSummary;
 
         // Match pane
         CheckedListBox clbTypes;
         TextBox  txtLabelPattern;
-        TextBox  txtTableFilter;
         TextBox  txtExtNamePattern;
         CheckBox chkIgnoreCase;
-        CheckBox chkExcludeAliases;
 
         // Replace pane
         RadioButton rbBaseLeave;
@@ -138,15 +146,20 @@ namespace ClarionDctAddin
         public SearchReplaceFieldsDialog(object dict)
         {
             this.dict = dict;
+            this.tables = DictModel.GetTables(dict)
+                .OrderBy(t => DictModel.AsString(DictModel.GetProp(t, "Name")), StringComparer.OrdinalIgnoreCase)
+                .ToList();
             BuildUi();
+            PopulateDriverFilter();
+            PopulateTables();
         }
 
         void BuildUi()
         {
             Text = "Search and replace fields (Bruce's new drivers) - " + DictModel.GetDictionaryName(dict);
             Width = 1280;
-            Height = 820;
-            MinimumSize = new Size(1060, 620);
+            Height = 980;
+            MinimumSize = new Size(1060, 780);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgColor;
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -180,24 +193,32 @@ namespace ClarionDctAddin
                 Text = "Rewrites the External Name (pipe-separated) on matching fields. A .DCT backup is written first; press Ctrl+S in Clarion to save."
             };
 
-            // Body = TableLayout with Match on the left (45%) and Replace on the right (55%).
+            // Body = TableLayout with 3 rows:
+            //   row 0: tables pane (full width — pick which tables to scan)
+            //   row 1: match pane (left) + replace pane (right)
+            //   row 2: preview (full width)
             var body = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 2,
+                RowCount = 3,
                 BackColor = BgColor,
                 Padding = new Padding(12)
             };
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+            body.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
             body.RowStyles.Add(new RowStyle(SizeType.Absolute, 400));
             body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            body.Controls.Add(BuildMatchPane(),   0, 0);
-            body.Controls.Add(BuildReplacePane(), 1, 0);
-            body.Controls.Add(BuildPreviewPane(), 0, 1);
-            body.SetColumnSpan(body.GetControlFromPosition(0, 1), 2);
+            var tablesPane = BuildTablesPane();
+            body.Controls.Add(tablesPane, 0, 0);
+            body.SetColumnSpan(tablesPane, 2);
+            body.Controls.Add(BuildMatchPane(),   0, 1);
+            body.Controls.Add(BuildReplacePane(), 1, 1);
+            var previewPane = BuildPreviewPane();
+            body.Controls.Add(previewPane, 0, 2);
+            body.SetColumnSpan(previewPane, 2);
 
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = PanelColor, Padding = new Padding(16, 10, 16, 10) };
             var btnClose = new Button { Text = "Close", Width = 120, Height = 32, Dock = DockStyle.Right, FlatStyle = FlatStyle.System };
@@ -215,6 +236,168 @@ namespace ClarionDctAddin
             Controls.Add(warning);
             Controls.Add(header);
             CancelButton = btnClose;
+        }
+
+        Panel BuildTablesPane()
+        {
+            var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 8), BackColor = BgColor };
+            var grp = new GroupBox
+            {
+                Dock = DockStyle.Fill,
+                Text = "Tables to scan (check the ones you want included)",
+                Font = new Font("Segoe UI Semibold", 9F),
+                BackColor = BgColor,
+                Padding = new Padding(8, 4, 8, 8)
+            };
+
+            var tools = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = BgColor, Padding = new Padding(0, 4, 0, 0) };
+            var bAll      = MakeSmall("Select all",     0);   bAll.Click      += delegate { SetAllChecked(lvTables, true);  UpdateTablesSummary(); };
+            var bNone     = MakeSmall("Clear all",      92);  bNone.Click     += delegate { SetAllChecked(lvTables, false); UpdateTablesSummary(); };
+            var bFiltered = MakeSmall("Check filtered", 184); bFiltered.Width = 108; bFiltered.Click += delegate { CheckVisible(); UpdateTablesSummary(); };
+            tools.Controls.Add(bAll);
+            tools.Controls.Add(bNone);
+            tools.Controls.Add(bFiltered);
+
+            var filter = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = BgColor, Padding = new Padding(0, 4, 0, 4) };
+            var lf = new Label { Text = "Filter:", Left = 0, Top = 6, Width = 40, Font = new Font("Segoe UI", 9F) };
+            txtTableFilter = new TextBox { Left = 44, Top = 2, Width = 180, Font = new Font("Segoe UI", 9.5F) };
+            txtTableFilter.TextChanged += delegate { ApplyTableListFilter(); };
+            var lfd = new Label { Text = "Driver:", Left = 234, Top = 6, Width = 46, Font = new Font("Segoe UI", 9F) };
+            cboDriverFilter = new ComboBox
+            {
+                Left = 282, Top = 2, Width = 130,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 9.5F)
+            };
+            cboDriverFilter.SelectedIndexChanged += delegate { ApplyTableListFilter(); };
+            chkExcludeAliases = new CheckBox
+            {
+                Text = "Exclude aliases",
+                Left = 422, Top = 4, AutoSize = true,
+                Checked = Settings.BatchExcludeAliases,
+                Font = new Font("Segoe UI", 9F)
+            };
+            chkExcludeAliases.CheckedChanged += delegate
+            {
+                Settings.BatchExcludeAliases = chkExcludeAliases.Checked;
+                ApplyTableListFilter();
+            };
+            filter.Controls.Add(lf);
+            filter.Controls.Add(txtTableFilter);
+            filter.Controls.Add(lfd);
+            filter.Controls.Add(cboDriverFilter);
+            filter.Controls.Add(chkExcludeAliases);
+
+            lvTables = new ListView
+            {
+                Dock = DockStyle.Fill,
+                View = View.Details,
+                CheckBoxes = true,
+                FullRowSelect = true,
+                GridLines = true,
+                HideSelection = false,
+                MultiSelect = false,
+                BackColor = Color.White,
+                Font = new Font("Segoe UI", 9F),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            lvTables.Columns.Add("Name",   240);
+            lvTables.Columns.Add("Prefix",  70);
+            lvTables.Columns.Add("Driver",  90);
+            lvTables.Columns.Add("Fields",  60, HorizontalAlignment.Right);
+            lvTables.ItemChecked += delegate { UpdateTablesSummary(); };
+
+            lblTablesSummary = new Label
+            {
+                Dock = DockStyle.Bottom,
+                Height = 22,
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = MutedColor,
+                Padding = new Padding(2, 4, 0, 0),
+                Text = ""
+            };
+
+            grp.Controls.Add(lvTables);
+            grp.Controls.Add(lblTablesSummary);
+            grp.Controls.Add(tools);
+            grp.Controls.Add(filter);
+
+            host.Controls.Add(grp);
+            return host;
+        }
+
+        static Button MakeSmall(string text, int left)
+        {
+            return new Button { Text = text, Left = left, Top = 0, Width = 86, Height = 26, FlatStyle = FlatStyle.System, Font = new Font("Segoe UI", 9F) };
+        }
+
+        static void SetAllChecked(ListView lv, bool on)
+        {
+            foreach (ListViewItem i in lv.Items) i.Checked = on;
+        }
+
+        void CheckVisible()
+        {
+            foreach (ListViewItem i in lvTables.Items) i.Checked = true;
+        }
+
+        void PopulateDriverFilter()
+        {
+            var distinct = tables
+                .Select(t => DictModel.AsString(DictModel.GetProp(t, "FileDriverName")) ?? "")
+                .Where(d => !string.IsNullOrEmpty(d))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            cboDriverFilter.Items.Clear();
+            cboDriverFilter.Items.Add(AllDriversLabel);
+            foreach (var d in distinct) cboDriverFilter.Items.Add(d);
+            cboDriverFilter.SelectedIndex = 0;
+        }
+
+        void PopulateTables() { RebuildTableList(""); }
+
+        void ApplyTableListFilter() { RebuildTableList((txtTableFilter.Text ?? "").Trim()); }
+
+        void RebuildTableList(string filter)
+        {
+            bool excludeAliases = chkExcludeAliases != null && chkExcludeAliases.Checked;
+            string driverFilter = null;
+            if (cboDriverFilter != null
+                && cboDriverFilter.SelectedItem != null
+                && cboDriverFilter.SelectedIndex > 0)
+            {
+                driverFilter = cboDriverFilter.SelectedItem.ToString();
+            }
+
+            lvTables.BeginUpdate();
+            lvTables.Items.Clear();
+            foreach (var t in tables)
+            {
+                if (excludeAliases && DictModel.IsAlias(t)) continue;
+                var name = DictModel.AsString(DictModel.GetProp(t, "Name")) ?? "?";
+                if (filter.Length > 0 && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var prefix = DictModel.AsString(DictModel.GetProp(t, "Prefix")) ?? "";
+                var drv    = DictModel.AsString(DictModel.GetProp(t, "FileDriverName")) ?? "";
+                if (driverFilter != null && !string.Equals(drv, driverFilter, StringComparison.OrdinalIgnoreCase)) continue;
+
+                int fieldCount = 0;
+                foreach (var _ in FieldMutator.EnumerateFields(t)) fieldCount++;
+
+                var display = DictModel.IsAlias(t) ? name + "  (alias)" : name;
+                var item = new ListViewItem(new[] { display, prefix, drv, fieldCount.ToString() });
+                item.Tag = t;
+                lvTables.Items.Add(item);
+            }
+            lvTables.EndUpdate();
+            UpdateTablesSummary();
+        }
+
+        void UpdateTablesSummary()
+        {
+            int shown  = lvTables.Items.Count;
+            int checkd = lvTables.CheckedItems.Count;
+            lblTablesSummary.Text = shown + " shown   ·   " + checkd + " checked   ·   " + tables.Count + " total in dictionary";
         }
 
         Panel BuildMatchPane()
@@ -243,36 +426,23 @@ namespace ClarionDctAddin
             var lblL = new Label { Text = "Field label regex:", Left = 246, Top = 24, AutoSize = true, Font = new Font("Segoe UI", 9F) };
             txtLabelPattern = new TextBox { Left = 246, Top = 44, Width = 240, Font = new Font("Consolas", 9.5F) };
 
-            var lblT = new Label { Text = "Table filter (regex, blank = all):", Left = 246, Top = 76, AutoSize = true, Font = new Font("Segoe UI", 9F) };
-            txtTableFilter = new TextBox { Left = 246, Top = 96, Width = 240, Font = new Font("Consolas", 9.5F) };
-
-            var lblE = new Label { Text = "Current External Name contains (regex, blank = any):", Left = 246, Top = 128, AutoSize = true, Font = new Font("Segoe UI", 9F) };
-            txtExtNamePattern = new TextBox { Left = 246, Top = 148, Width = 240, Font = new Font("Consolas", 9.5F) };
+            var lblE = new Label { Text = "Current External Name contains (regex, blank = any):", Left = 246, Top = 76, AutoSize = true, Font = new Font("Segoe UI", 9F) };
+            txtExtNamePattern = new TextBox { Left = 246, Top = 96, Width = 240, Font = new Font("Consolas", 9.5F) };
 
             chkIgnoreCase = new CheckBox
             {
                 Text = "Case-insensitive regex",
-                Left = 246, Top = 180, AutoSize = true, Checked = true,
+                Left = 246, Top = 128, AutoSize = true, Checked = true,
                 Font = new Font("Segoe UI", 9F)
             };
-            chkExcludeAliases = new CheckBox
-            {
-                Text = "Exclude aliases",
-                Left = 246, Top = 204, AutoSize = true, Checked = Settings.BatchExcludeAliases,
-                Font = new Font("Segoe UI", 9F)
-            };
-            chkExcludeAliases.CheckedChanged += delegate { Settings.BatchExcludeAliases = chkExcludeAliases.Checked; };
 
             grp.Controls.Add(lblTypes);
             grp.Controls.Add(clbTypes);
             grp.Controls.Add(lblL);
             grp.Controls.Add(txtLabelPattern);
-            grp.Controls.Add(lblT);
-            grp.Controls.Add(txtTableFilter);
             grp.Controls.Add(lblE);
             grp.Controls.Add(txtExtNamePattern);
             grp.Controls.Add(chkIgnoreCase);
-            grp.Controls.Add(chkExcludeAliases);
 
             host.Controls.Add(grp);
             return host;
@@ -487,18 +657,24 @@ namespace ClarionDctAddin
             lvPreview.Items.Clear();
             btnApply.Enabled = false;
 
-            Regex labelRe = null, tableRe = null, extRe = null;
+            Regex labelRe = null, extRe = null;
             var opts = chkIgnoreCase.Checked ? RegexOptions.IgnoreCase : RegexOptions.None;
             try
             {
                 var lp = (txtLabelPattern.Text   ?? "").Trim(); if (lp.Length > 0) labelRe = new Regex(lp, opts);
-                var tp = (txtTableFilter.Text    ?? "").Trim(); if (tp.Length > 0) tableRe = new Regex(tp, opts);
                 var ep = (txtExtNamePattern.Text ?? "").Trim(); if (ep.Length > 0) extRe   = new Regex(ep, opts);
             }
             catch (Exception ex)
             {
                 lvPreview.EndUpdate();
                 lblPreviewSummary.Text = "Invalid regex: " + ex.Message;
+                return;
+            }
+
+            if (lvTables.CheckedItems.Count == 0)
+            {
+                lvPreview.EndUpdate();
+                lblPreviewSummary.Text = "Check at least one table in the list above.";
                 return;
             }
 
@@ -512,11 +688,11 @@ namespace ClarionDctAddin
 
             int scanned = 0, matched = 0, willChange = 0;
 
-            foreach (var t in DictModel.GetTables(dict))
+            foreach (ListViewItem tItem in lvTables.CheckedItems)
             {
-                if (chkExcludeAliases.Checked && DictModel.IsAlias(t)) continue;
+                var t = tItem.Tag;
+                if (t == null) continue;
                 var tName = DictModel.AsString(DictModel.GetProp(t, "Name")) ?? "";
-                if (tableRe != null && !tableRe.IsMatch(tName)) continue;
                 var prefix = DictModel.AsString(DictModel.GetProp(t, "Prefix")) ?? "";
 
                 foreach (var f in FieldMutator.EnumerateFields(t))
