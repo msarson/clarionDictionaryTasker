@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 namespace ClarionDctAddin
 {
-    internal enum LauncherTileKind { BrowseTables, CopyFields, CopyKeys, Tools }
+    internal enum LauncherTileKind { BrowseTables, CopyFields, CopyKeys, SqlMigration, Tools }
 
     internal class LauncherDialog : Form
     {
@@ -126,6 +126,10 @@ namespace ClarionDctAddin
                 "Copy keys to other tables with automatic component remap by field label and backup before writing.",
                 LauncherTileKind.CopyKeys,
                 OpenCopyKeys));
+            body.Controls.Add(MakeTile("SQL Migration",
+                "Switch selected tables to MSSQL / ODBC / ADO / SQLite / Oracle. Set Driver Options, Owner, full name with schema prefix, and Create / Threaded / Encrypt / Bindable attributes.",
+                LauncherTileKind.SqlMigration,
+                OpenSqlMigration));
             body.Controls.Add(MakeTile("More tools",
                 "Lint report, search, dictionary diff, SQL/Markdown/Model-class export, refactoring helpers, and more.",
                 LauncherTileKind.Tools,
@@ -153,10 +157,11 @@ namespace ClarionDctAddin
             return tile;
         }
 
-        void OpenBrowse()     { Hide(); using (var d = new TableListDialog(dict))      d.ShowDialog(this); Show(); }
-        void OpenCopyFields() { Hide(); using (var d = new BatchCopyDialog(dict))      d.ShowDialog(this); Show(); }
-        void OpenCopyKeys()   { Hide(); using (var d = new BatchCopyKeysDialog(dict))  d.ShowDialog(this); Show(); }
-        void OpenTools()      { Hide(); using (var d = new ToolsDialog(dict))          d.ShowDialog(this); Show(); }
+        void OpenBrowse()       { Hide(); using (var d = new TableListDialog(dict))     d.ShowDialog(this); Show(); }
+        void OpenCopyFields()   { Hide(); using (var d = new BatchCopyDialog(dict))     d.ShowDialog(this); Show(); }
+        void OpenCopyKeys()     { Hide(); using (var d = new BatchCopyKeysDialog(dict)) d.ShowDialog(this); Show(); }
+        void OpenSqlMigration() { Hide(); using (var d = new SqlMigrationDialog(dict))  d.ShowDialog(this); Show(); }
+        void OpenTools()        { Hide(); using (var d = new ToolsDialog(dict))         d.ShowDialog(this); Show(); }
 
         void OpenHelp()
         {
@@ -309,6 +314,47 @@ namespace ClarionDctAddin
                         g.DrawLine(boldPen, shaftStart, cy, shaftEnd, cy);
                         g.DrawLine(boldPen, shaftEnd, cy, shaftEnd, cy + 8);
                         g.DrawLine(boldPen, shaftEnd - 8, cy, shaftEnd - 8, cy + 6);
+                        break;
+                    }
+                    case LauncherTileKind.SqlMigration:
+                    {
+                        // Source stack (TPS) -> arrow -> target cylinder (SQL).
+                        int midY = box.Y + box.Height / 2;
+
+                        // Source stack on the left: three thin bands (like
+                        // TPS "flat" files).
+                        int sx = box.X + 6;
+                        int sw = 16;
+                        int sh = 5;
+                        int sgap = 3;
+                        int stop = midY - ((sh * 3 + sgap * 2) / 2);
+                        for (int i = 0; i < 3; i++)
+                        {
+                            var r = new Rectangle(sx, stop + i * (sh + sgap), sw, sh);
+                            g.FillRectangle(lightBrush, r);
+                            g.DrawRectangle(thinPen, r);
+                        }
+
+                        // Arrow
+                        int ax1 = sx + sw + 2;
+                        int ax2 = box.X + box.Width - 26;
+                        g.DrawLine(boldPen, ax1, midY, ax2, midY);
+                        g.DrawLine(boldPen, ax2 - 4, midY - 4, ax2, midY);
+                        g.DrawLine(boldPen, ax2 - 4, midY + 4, ax2, midY);
+
+                        // Target cylinder on the right.
+                        int cxr = box.X + box.Width - 20;
+                        int cyr = midY;
+                        int cw  = 18;
+                        int ch  = 22;
+                        var top  = new Rectangle(cxr - cw / 2, cyr - ch / 2,      cw, 6);
+                        var body = new Rectangle(cxr - cw / 2, cyr - ch / 2 + 3,  cw, ch - 6);
+                        var btm  = new Rectangle(cxr - cw / 2, cyr + ch / 2 - 6,  cw, 6);
+                        g.FillRectangle(whiteBrush, body);
+                        g.DrawRectangle(boldPen,    body);
+                        g.FillEllipse(lightBrush, top);
+                        g.DrawEllipse(boldPen,    top);
+                        g.DrawArc(thinPen, btm, 0, 180);
                         break;
                     }
                     case LauncherTileKind.Tools:

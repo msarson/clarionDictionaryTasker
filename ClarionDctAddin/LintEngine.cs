@@ -138,8 +138,11 @@ namespace ClarionDctAddin
 
                     var extName = DictModel.AsString(DictModel.GetProp(k, "ExternalName")) ?? "";
                     if (string.IsNullOrEmpty(extName))
-                        f.Add(new Finding { Severity = Severity.Info, Target = target, Rule = "empty-external-name",
-                                            Message = "Key has no ExternalName — SQL drivers usually require one." });
+                    {
+                        if (Settings.LintCheckEmptyExternalName)
+                            f.Add(new Finding { Severity = Severity.Info, Target = target, Rule = "empty-external-name",
+                                                Message = "Key has no ExternalName — SQL drivers usually require one." });
+                    }
                     else
                         CheckExternalNameShape(f, target, "key", extName, driver);
                 }

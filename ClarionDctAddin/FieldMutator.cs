@@ -77,6 +77,102 @@ namespace ClarionDctAddin
             }
         }
 
+        // Mirror of SetStringProp for bool-typed DDFile/DDField attributes
+        // (Create / Threaded / Encrypt / Bindable). Same notify pipeline so the
+        // native save path picks the change up and the tab goes dirty.
+        public static bool SetBoolProp(object target, string propName, bool value, Result r, string tag)
+        {
+            if (target == null) return false;
+            var t = target.GetType();
+            var p = t.GetProperty(propName,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            try
+            {
+                string how;
+                if (p != null && p.CanWrite && p.PropertyType == typeof(bool))
+                {
+                    p.SetValue(target, value, null);
+                    how = "setter";
+                }
+                else if (SetBackingBoolField(target, propName, value))
+                {
+                    how = "backing-field";
+                }
+                else
+                {
+                    r.Messages.Add(tag + ": no writable bool path for " + propName);
+                    return false;
+                }
+                NotifyFieldUpdated(target, r, tag, how);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                r.Messages.Add(tag + ": set " + propName + " failed - " + inner.GetType().Name + " " + inner.Message);
+                return false;
+            }
+        }
+
+        static bool SetBackingBoolField(object target, string propName, bool value)
+        {
+            var candidates = new[]
+            {
+                char.ToLowerInvariant(propName[0]) + (propName.Length > 1 ? propName.Substring(1) : ""),
+                "_" + propName,
+                "_" + char.ToLowerInvariant(propName[0]) + (propName.Length > 1 ? propName.Substring(1) : ""),
+                "m_" + propName,
+                propName
+            };
+            var t = target.GetType();
+            while (t != null && t != typeof(object))
+            {
+                foreach (var name in candidates)
+                {
+                    var f = t.GetField(name,
+                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                    if (f != null && f.FieldType == typeof(bool))
+                    {
+                        try { f.SetValue(target, value); return true; } catch { }
+                    }
+                }
+                t = t.BaseType;
+            }
+            return false;
+        }
+
+        // Probe whether a bool-typed attribute is writable on this build of
+        // DDFile/DDField. Used by SqlMigrationDialog so the UI can grey out
+        // attribute toggles (Bindable in particular) if the installed Clarion
+        // build doesn't expose them.
+        public static bool HasWritableBoolProp(object sample, string propName)
+        {
+            if (sample == null || string.IsNullOrEmpty(propName)) return false;
+            var p = sample.GetType().GetProperty(propName,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (p != null && p.CanWrite && p.PropertyType == typeof(bool)) return true;
+            var t = sample.GetType();
+            var candidates = new[]
+            {
+                char.ToLowerInvariant(propName[0]) + (propName.Length > 1 ? propName.Substring(1) : ""),
+                "_" + propName,
+                "_" + char.ToLowerInvariant(propName[0]) + (propName.Length > 1 ? propName.Substring(1) : ""),
+                "m_" + propName,
+                propName
+            };
+            while (t != null && t != typeof(object))
+            {
+                foreach (var name in candidates)
+                {
+                    var f = t.GetField(name,
+                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                    if (f != null && f.FieldType == typeof(bool)) return true;
+                }
+                t = t.BaseType;
+            }
+            return false;
+        }
+
         static bool SetBackingStringField(object target, string propName, string value)
         {
             // Typical SoftVelocity convention: PublicProperty <-> privateField (camelCase)

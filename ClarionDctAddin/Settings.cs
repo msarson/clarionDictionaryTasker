@@ -15,6 +15,7 @@ namespace ClarionDctAddin
         const string KeyDdlIncludeComments = "ddl_include_comments";
         const string KeyDdlUseFullPathName = "ddl_use_full_path_name";
         const string KeyBatchExcludeAliases = "batch_exclude_aliases";
+        const string KeyLintCheckEmptyExternalName = "lint_check_empty_external_name";
         const string KeyFixKeysStyle     = "fix_keys_style";
         const string KeyFixKeysOwner     = "fix_keys_owner";
         const string KeyFixKeysKey       = "fix_keys_key";
@@ -185,6 +186,11 @@ namespace ClarionDctAddin
         // Fields/Keys are shared with the base table — touching them in a batch
         // produces duplicate writes against the same underlying object.
         public static bool BatchExcludeAliases { get { return GetBool(KeyBatchExcludeAliases, true); } set { SetBool(KeyBatchExcludeAliases, value); } }
+
+        // Lint: a blank Key.ExternalName is illegal on SQL drivers but perfectly
+        // fine for tables that stay TPS or that use a driver that doesn't need
+        // index names. Default ON for back-compat; the lint report dialog toggles this.
+        public static bool LintCheckEmptyExternalName { get { return GetBool(KeyLintCheckEmptyExternalName, true); } set { SetBool(KeyLintCheckEmptyExternalName, value); } }
 
         public static SqlDdlGenerator.Dialect PreferredDialect
         {

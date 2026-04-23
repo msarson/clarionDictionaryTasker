@@ -64,11 +64,24 @@ namespace ClarionDctAddin
 
             var filterBar = new Panel { Dock = DockStyle.Top, Height = 38, BackColor = BgColor, Padding = new Padding(16, 8, 16, 4) };
             var lblFilter = new Label { Text = "Filter:", AutoSize = true, Top = 8, Left = 0, Font = new Font("Segoe UI", 9F) };
-            txtFilter = new TextBox { Top = 4, Left = 46, Width = 320, Font = new Font("Segoe UI", 9.5F) };
+            txtFilter = new TextBox { Top = 4, Left = 46, Width = 240, Font = new Font("Segoe UI", 9.5F) };
             txtFilter.TextChanged += delegate { ApplyFilter(); };
-            lblSummary = new Label { AutoSize = true, Top = 8, Left = 380, Width = 600, Font = new Font("Segoe UI", 9F), ForeColor = Color.FromArgb(100, 115, 135) };
+            var chkEmptyExt = new CheckBox
+            {
+                Text = "Flag blank key ExternalName",
+                Top = 7, Left = 300, AutoSize = true,
+                Checked = Settings.LintCheckEmptyExternalName,
+                Font = new Font("Segoe UI", 9F)
+            };
+            chkEmptyExt.CheckedChanged += delegate
+            {
+                Settings.LintCheckEmptyExternalName = chkEmptyExt.Checked;
+                RunScan();
+            };
+            lblSummary = new Label { AutoSize = true, Top = 8, Left = 520, Width = 540, Font = new Font("Segoe UI", 9F), ForeColor = Color.FromArgb(100, 115, 135) };
             filterBar.Controls.Add(lblFilter);
             filterBar.Controls.Add(txtFilter);
+            filterBar.Controls.Add(chkEmptyExt);
             filterBar.Controls.Add(lblSummary);
 
             lv = new ListView
