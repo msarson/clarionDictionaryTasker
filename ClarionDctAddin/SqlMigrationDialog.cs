@@ -804,12 +804,13 @@ namespace ClarionDctAddin
                     return true;
             }
 
-            // Path 2: borrow a FileDriver ref from a sibling table already on the
-            // target driver. This keeps full in-memory coherence (the UI sees
-            // the new driver immediately) and the .DCT saves correctly.
-            // Only viable if another table in this dict is already using the
-            // target driver — which is why the combobox is populated from the
-            // in-use drivers union with installed-on-disk drivers.
+            // Path 2: get a valid FileDriver ref and assign it to the table.
+            // Two sources, in order:
+            //   a) borrow from a sibling table already using the target driver
+            //   b) call SoftVelocity.DataDictionary.FileDriver.Instance(name, true)
+            //      — the static factory Clarion itself uses to resolve driver
+            //      names to FileDriver objects. FileDriver's public ctors are
+            //      all private, so this is the only supported way to make one.
             foreach (var propName in new[] { "FileDriver", "Driver" })
             {
                 var p = table.GetType().GetProperty(propName,
@@ -818,12 +819,19 @@ namespace ClarionDctAddin
                 if (p.PropertyType == typeof(string)) continue;
 
                 var driverObj = BorrowFileDriverFromSiblingTable(newDriver);
+                string source = "borrowed ref";
+                if (driverObj == null)
+                {
+                    driverObj = ResolveFileDriverViaInstance(p.PropertyType, newDriver, r, tableTag);
+                    source = "FileDriver.Instance factory";
+                }
+
                 if (driverObj != null && p.PropertyType.IsAssignableFrom(driverObj.GetType()))
                 {
                     try
                     {
                         p.SetValue(table, driverObj, null);
-                        r.Messages.Add(tableTag + ".driver via " + propName + " (borrowed ref) -> " + newDriver);
+                        r.Messages.Add(tableTag + ".driver via " + propName + " (" + source + ") -> " + newDriver);
                         KickTableDirty(table, r, tableTag);
                         return true;
                     }
@@ -847,6 +855,39 @@ namespace ClarionDctAddin
 
             DumpDriverPropertyShape(table, r, tableTag);
             return false;
+        }
+
+        // Invoke SoftVelocity's own static factory to resolve a driver name to
+        // a usable FileDriver object. The method lives on the FileDriver type
+        // itself (SoftVelocity.DataDictionary.FileDriver::Instance(string, bool)).
+        // Both parameterless and (IASLFileDriver) ctors on FileDriver are
+        // private, so this is the only supported construction path.
+        static object ResolveFileDriverViaInstance(Type fileDriverType, string driverName,
+                                                   FieldMutator.Result r, string tableTag)
+        {
+            if (fileDriverType == null || string.IsNullOrEmpty(driverName)) return null;
+            var m = fileDriverType.GetMethod("Instance",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                null, new[] { typeof(string), typeof(bool) }, null);
+            if (m == null)
+            {
+                r.Messages.Add(tableTag + ".driver: FileDriver.Instance(string,bool) not found on " + fileDriverType.FullName);
+                return null;
+            }
+            foreach (var createFlag in new[] { true, false })
+            {
+                try
+                {
+                    var result = m.Invoke(null, new object[] { driverName, createFlag });
+                    if (result != null) return result;
+                }
+                catch (Exception ex)
+                {
+                    var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                    r.Messages.Add(tableTag + ".driver: FileDriver.Instance(\"" + driverName + "\", " + createFlag + ") threw " + inner.GetType().Name + " " + inner.Message);
+                }
+            }
+            return null;
         }
 
         // Look for a table in the dict that's already on the target driver and
