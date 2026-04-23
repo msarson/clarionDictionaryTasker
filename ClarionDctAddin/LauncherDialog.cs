@@ -32,8 +32,8 @@ namespace ClarionDctAddin
         {
             Text = "Dictionary Tasker";
             Width = 880;
-            Height = 660;
-            MinimumSize = new Size(760, 540);
+            Height = 780;
+            MinimumSize = new Size(760, 600);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgColor;
             FormBorderStyle = FormBorderStyle.Sizable;
