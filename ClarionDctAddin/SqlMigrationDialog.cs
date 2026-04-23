@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Windows.Forms;
 
@@ -646,7 +647,7 @@ namespace ClarionDctAddin
             foreach (var p in currentPlan)
             {
                 int okLocal = 0, failLocal = 0;
-                ApplyString(p.Table, "FileDriverName", p.BeforeDriver,   p.AfterDriver,   r, p.TableLabel, ref okLocal, ref failLocal);
+                ApplyDriver(p.Table, p.BeforeDriver,   p.AfterDriver,   r, p.TableLabel, ref okLocal, ref failLocal);
                 ApplyString(p.Table, "DriverOptions",  p.BeforeOptions,  p.AfterOptions,  r, p.TableLabel, ref okLocal, ref failLocal);
                 ApplyString(p.Table, "OwnerName",      p.BeforeOwner,    p.AfterOwner,    r, p.TableLabel, ref okLocal, ref failLocal);
                 ApplyString(p.Table, "FullPathName",   p.BeforeFullName, p.AfterFullName, r, p.TableLabel, ref okLocal, ref failLocal);
@@ -688,6 +689,134 @@ namespace ClarionDctAddin
             var tag = tableLabel + "." + prop;
             if (FieldMutator.SetStringProp(table, prop, after ?? "", r, tag)) okLocal++;
             else failLocal++;
+        }
+
+        // Driver change takes its own path because SoftVelocity's DDFile usually
+        // exposes FileDriverName as a read-only wrapper over a DDDriver reference.
+        // Try in order:
+        //   1. FileDriverName, DriverName, Driver — as string setters
+        //   2. Driver, FileDriver — as ref setters, resolved against the dict's
+        //      Drivers collection (Drivers / FileDrivers / DriverCollection)
+        // On failure, dump the shape of all driver-related properties to r.Messages
+        // so we can see what's actually writable on this Clarion build.
+        void ApplyDriver(object table, string before, string after,
+                         FieldMutator.Result r, string tableLabel,
+                         ref int okLocal, ref int failLocal)
+        {
+            if (string.Equals(before ?? "", after ?? "", StringComparison.Ordinal)) return;
+            if (TrySetDriver(table, after ?? "", r, tableLabel)) okLocal++;
+            else failLocal++;
+        }
+
+        bool TrySetDriver(object table, string newDriver, FieldMutator.Result r, string tableTag)
+        {
+            if (table == null || string.IsNullOrEmpty(newDriver)) return false;
+
+            // Path 1: one of the string-typed writable properties.
+            foreach (var propName in new[] { "FileDriverName", "DriverName", "Driver" })
+            {
+                var p = table.GetType().GetProperty(propName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (p == null || !p.CanWrite || p.PropertyType != typeof(string)) continue;
+                if (FieldMutator.SetStringProp(table, propName, newDriver, r, tableTag + ".driver@" + propName))
+                    return true;
+            }
+
+            // Path 2: reference-typed Driver / FileDriver property. Resolve the
+            // DDDriver object from the dictionary's driver collection by name,
+            // then assign it via the ref setter.
+            foreach (var propName in new[] { "Driver", "FileDriver" })
+            {
+                var p = table.GetType().GetProperty(propName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (p == null || !p.CanWrite) continue;
+                if (p.PropertyType == typeof(string)) continue;
+                var driverObj = FindDriverByName(newDriver);
+                if (driverObj == null)
+                {
+                    r.Messages.Add(tableTag + ".driver: " + propName + " is ref-typed but no DDDriver named '" + newDriver + "' exists in dict.Drivers");
+                    continue;
+                }
+                if (!p.PropertyType.IsAssignableFrom(driverObj.GetType()))
+                {
+                    r.Messages.Add(tableTag + ".driver: found driver '" + newDriver + "' (" + driverObj.GetType().Name + ") but it's not assignable to " + propName + " (" + p.PropertyType.Name + ")");
+                    continue;
+                }
+                try
+                {
+                    p.SetValue(table, driverObj, null);
+                    r.Messages.Add(tableTag + ".driver via " + propName + " (ref setter) -> " + newDriver);
+                    // Fire the same dirty/notify path string mutations use.
+                    FieldMutator.SetStringProp(table, "OwnerName",
+                        DictModel.AsString(DictModel.GetProp(table, "OwnerName")) ?? "",
+                        r, tableTag + ".driver.kick");
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                    r.Messages.Add(tableTag + ".driver: " + propName + " ref setter threw " + inner.GetType().Name + " " + inner.Message);
+                }
+            }
+
+            DumpDriverPropertyShape(table, r, tableTag);
+            return false;
+        }
+
+        object FindDriverByName(string name)
+        {
+            if (dict == null || string.IsNullOrEmpty(name)) return null;
+            foreach (var collName in new[] { "Drivers", "FileDrivers", "DriverCollection", "DriverList" })
+            {
+                var coll = DictModel.GetProp(dict, collName) as IEnumerable;
+                if (coll == null) continue;
+                foreach (var d in coll)
+                {
+                    if (d == null) continue;
+                    var dn = DictModel.AsString(DictModel.GetProp(d, "Name"))
+                          ?? DictModel.AsString(DictModel.GetProp(d, "DriverName"))
+                          ?? DictModel.AsString(DictModel.GetProp(d, "Label"));
+                    if (string.Equals(dn, name, StringComparison.OrdinalIgnoreCase)) return d;
+                }
+            }
+            return null;
+        }
+
+        void DumpDriverPropertyShape(object table, FieldMutator.Result r, string tag)
+        {
+            var sb = new StringBuilder(tag + ".driver: no writable path found. Table props matching 'driver':");
+            var t = table.GetType();
+            foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                if (p.Name.IndexOf("driver", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                sb.Append(" [").Append(p.Name).Append(":").Append(p.PropertyType.Name);
+                if (p.CanRead)  sb.Append(" R");
+                if (p.CanWrite) sb.Append("W");
+                sb.Append("]");
+            }
+            // Walk base types for private fields with 'driver' in the name.
+            sb.Append("  Backing fields:");
+            var walker = t;
+            while (walker != null && walker != typeof(object))
+            {
+                foreach (var f in walker.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    if (f.Name.IndexOf("driver", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    sb.Append(" ").Append(f.Name).Append(":").Append(f.FieldType.Name);
+                }
+                walker = walker.BaseType;
+            }
+            // Dict-level driver collections.
+            if (dict != null)
+            {
+                sb.Append("  dict props matching 'driver':");
+                foreach (var p in dict.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                {
+                    if (p.Name.IndexOf("driver", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    sb.Append(" ").Append(p.Name).Append(":").Append(p.PropertyType.Name);
+                }
+            }
+            r.Messages.Add(sb.ToString());
         }
 
         static void ApplyBool(object table, string prop, bool? before, bool? after,
