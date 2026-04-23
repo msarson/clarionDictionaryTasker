@@ -31,9 +31,9 @@ namespace ClarionDctAddin
         void BuildUi()
         {
             Text = "Dictionary Tasker";
-            Width = 880;
-            Height = 780;
-            MinimumSize = new Size(760, 600);
+            Width = 940;
+            Height = 800;
+            MinimumSize = new Size(820, 620);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = BgColor;
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -150,7 +150,7 @@ namespace ClarionDctAddin
                 TileDescription = desc,
                 Kind = icon,
                 Width = 460,
-                Height = 92,
+                Height = 108,
                 Margin = new Padding(0, 0, 0, 14)
             };
             tile.TileClicked += delegate { onClick(); };
