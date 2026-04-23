@@ -127,7 +127,7 @@ namespace ClarionDctAddin
                 LauncherTileKind.CopyKeys,
                 OpenCopyKeys));
             body.Controls.Add(MakeTile("SQL Migration",
-                "Switch selected tables to MSSQL / ODBC / ADO / SQLite / Oracle. Set Driver Options, Owner, full name with schema prefix, and Create / Threaded / Encrypt / Bindable attributes.",
+                "Switch tables to MSSQL / ODBC / ADO / SQLite / Oracle. Set DriverOptions, Owner, schema-prefixed full name, plus Create / Threaded / Encrypt / Bindable.",
                 LauncherTileKind.SqlMigration,
                 OpenSqlMigration));
             body.Controls.Add(MakeTile("More tools",
