@@ -35,6 +35,7 @@ namespace ClarionDctAddin
         readonly List<object> tables;
 
         TextBox  txtFilter;
+        ComboBox cboDriverFilter;
         ListView lvTables;
         ListView lvPreview;
         Label    lblTablesSummary;
@@ -171,12 +172,21 @@ namespace ClarionDctAddin
 
             var filter = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = BgColor, Padding = new Padding(0, 4, 0, 4) };
             var lf = new Label { Text = "Filter:", Left = 0, Top = 6, Width = 40, Font = new Font("Segoe UI", 9F) };
-            txtFilter = new TextBox { Left = 44, Top = 2, Width = 220, Font = new Font("Segoe UI", 9.5F) };
+            txtFilter = new TextBox { Left = 44, Top = 2, Width = 180, Font = new Font("Segoe UI", 9.5F) };
             txtFilter.TextChanged += delegate { ApplyFilter(); };
+            var lfd = new Label { Text = "Driver:", Left = 234, Top = 6, Width = 46, Font = new Font("Segoe UI", 9F) };
+            cboDriverFilter = new ComboBox
+            {
+                Left = 282, Top = 2, Width = 130,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 9.5F)
+            };
+            PopulateDriverFilter();
+            cboDriverFilter.SelectedIndexChanged += delegate { ApplyFilter(); };
             chkExcludeAliases = new CheckBox
             {
                 Text = "Exclude aliases",
-                Left = 274, Top = 4,
+                Left = 422, Top = 4,
                 AutoSize = true,
                 Checked = Settings.BatchExcludeAliases,
                 Font = new Font("Segoe UI", 9F)
@@ -188,6 +198,8 @@ namespace ClarionDctAddin
             };
             filter.Controls.Add(lf);
             filter.Controls.Add(txtFilter);
+            filter.Controls.Add(lfd);
+            filter.Controls.Add(cboDriverFilter);
             filter.Controls.Add(chkExcludeAliases);
 
             lvTables = new ListView
@@ -424,6 +436,22 @@ namespace ClarionDctAddin
             }
         }
 
+        const string AllDriversLabel = "(all drivers)";
+
+        void PopulateDriverFilter()
+        {
+            var distinct = tables
+                .Select(t => DictModel.AsString(DictModel.GetProp(t, "FileDriverName")) ?? "")
+                .Where(d => !string.IsNullOrEmpty(d))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            cboDriverFilter.Items.Clear();
+            cboDriverFilter.Items.Add(AllDriversLabel);
+            foreach (var d in distinct) cboDriverFilter.Items.Add(d);
+            cboDriverFilter.SelectedIndex = 0;
+        }
+
         void PopulateTables() { RebuildTableList(""); }
 
         void ApplyFilter() { RebuildTableList((txtFilter.Text ?? "").Trim()); }
@@ -431,6 +459,14 @@ namespace ClarionDctAddin
         void RebuildTableList(string filter)
         {
             bool excludeAliases = chkExcludeAliases == null || chkExcludeAliases.Checked;
+            string driverFilter = null;
+            if (cboDriverFilter != null
+                && cboDriverFilter.SelectedItem != null
+                && cboDriverFilter.SelectedIndex > 0)
+            {
+                driverFilter = cboDriverFilter.SelectedItem.ToString();
+            }
+
             lvTables.BeginUpdate();
             lvTables.Items.Clear();
             foreach (var t in tables)
@@ -440,6 +476,7 @@ namespace ClarionDctAddin
                 if (filter.Length > 0 && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 var prefix   = DictModel.AsString(DictModel.GetProp(t, "Prefix")) ?? "";
                 var drv      = DictModel.AsString(DictModel.GetProp(t, "FileDriverName")) ?? "";
+                if (driverFilter != null && !string.Equals(drv, driverFilter, StringComparison.OrdinalIgnoreCase)) continue;
                 var owner    = DictModel.AsString(DictModel.GetProp(t, "OwnerName")) ?? "";
                 var fullName = DictModel.AsString(DictModel.GetProp(t, "FullPathName")) ?? "";
                 var display  = DictModel.IsAlias(t) ? name + "  (alias)" : name;
