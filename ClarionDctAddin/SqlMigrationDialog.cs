@@ -712,7 +712,9 @@ namespace ClarionDctAddin
 
             var confirm = MessageBox.Show(this,
                 currentPlan.Count + " table(s) will be modified.\r\n"
-                + "A .tasker-bak-<timestamp> backup of the .DCT is written first.\r\n\r\nProceed?",
+                + "Any open table editor tabs for these tables will be closed first\r\n"
+                + "so the editor's UI state doesn't overwrite the change on save.\r\n"
+                + "A .tasker-bak-<timestamp> backup of the .DCT is written before any edit.\r\n\r\nProceed?",
                 "SQL Migration", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
             if (confirm != DialogResult.OK) return;
 
@@ -724,6 +726,13 @@ namespace ClarionDctAddin
                     "Backup failed — aborting.\r\n\r\n" + string.Join("\r\n", r.Messages.ToArray()));
                 return;
             }
+
+            // CRITICAL: close any open TableEditor panes for the tables we're
+            // about to mutate. Otherwise the editor's UI widgets (driver
+            // combobox, FullPathName textbox, etc.) still hold the pre-mutation
+            // values — at save time EntityEditor.AcceptChanges flushes them
+            // back over our DDFile changes and the table reverts.
+            CloseOpenTableEditors(r);
 
             int totalOk = 0, totalFail = 0;
             foreach (var p in currentPlan)
@@ -951,6 +960,55 @@ namespace ClarionDctAddin
         {
             var owner = DictModel.AsString(DictModel.GetProp(table, "OwnerName")) ?? "";
             FieldMutator.SetStringProp(table, "OwnerName", owner, r, tableTag + ".driver.kick");
+        }
+
+        // Close open TableEditor tabs before we mutate — otherwise the editor
+        // widget state (driver combobox, FullPathName textbox etc., loaded at
+        // open time) flushes back over our changes when the user saves.
+        //
+        // DCTContent exposes CloseAllTables() (private) and CloseTable(DDBaseFile,
+        // bool) (internal). Prefer per-table close so we only touch tables we're
+        // actually changing; fall back to CloseAllTables if the per-table entry
+        // isn't available.
+        void CloseOpenTableEditors(FieldMutator.Result r)
+        {
+            var view = DictModel.GetActiveDictionaryView();
+            if (view == null) { r.Messages.Add("editor close: no active view"); return; }
+            var control = DictModel.GetProp(view, "Control");
+            if (control == null) { r.Messages.Add("editor close: no Control on view"); return; }
+
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+            var mCloseOne = control.GetType().GetMethod("CloseTable", flags);
+            if (mCloseOne != null)
+            {
+                int closed = 0, failed = 0;
+                foreach (var p in currentPlan)
+                {
+                    try
+                    {
+                        // second arg is usually "prompt user" / "save first"; pass false to force-close silently.
+                        mCloseOne.Invoke(control, new object[] { p.Table, false });
+                        closed++;
+                    }
+                    catch { failed++; }
+                }
+                r.Messages.Add("CloseTable() invoked for " + closed + " table(s), " + failed + " failed.");
+                return;
+            }
+
+            var mCloseAll = control.GetType().GetMethod("CloseAllTables", flags, null, Type.EmptyTypes, null);
+            if (mCloseAll != null)
+            {
+                try { mCloseAll.Invoke(control, null); r.Messages.Add("CloseAllTables() invoked."); return; }
+                catch (Exception ex)
+                {
+                    var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                    r.Messages.Add("CloseAllTables threw " + inner.GetType().Name + " " + inner.Message);
+                }
+            }
+
+            r.Messages.Add("editor close: no CloseTable / CloseAllTables method found on " + control.GetType().FullName);
         }
 
         void DumpDriverPropertyShape(object table, FieldMutator.Result r, string tag)
