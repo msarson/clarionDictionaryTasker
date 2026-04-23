@@ -722,64 +722,111 @@ namespace ClarionDctAddin
                     return true;
             }
 
-            // Path 2: reference-typed Driver / FileDriver property. Resolve the
-            // DDDriver object from the dictionary's driver collection by name,
-            // then assign it via the ref setter.
-            foreach (var propName in new[] { "Driver", "FileDriver" })
+            // Path 2: reference-typed Driver / FileDriver property.
+            // SoftVelocity's DDFile has FileDriver:FileDriver RW but no dict-level
+            // Drivers collection. So instead of looking up a driver by name on the
+            // dict, find another table that's ALREADY on the target driver and
+            // borrow its FileDriver ref. If no such table exists, fall back to
+            // writing the driverString backing field directly (that's the raw
+            // token Clarion serializes to the .DCT — it'll re-resolve on load).
+            foreach (var propName in new[] { "FileDriver", "Driver" })
             {
                 var p = table.GetType().GetProperty(propName,
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 if (p == null || !p.CanWrite) continue;
                 if (p.PropertyType == typeof(string)) continue;
-                var driverObj = FindDriverByName(newDriver);
-                if (driverObj == null)
+
+                var driverObj = BorrowFileDriverFromSiblingTable(newDriver);
+                if (driverObj != null && p.PropertyType.IsAssignableFrom(driverObj.GetType()))
                 {
-                    r.Messages.Add(tableTag + ".driver: " + propName + " is ref-typed but no DDDriver named '" + newDriver + "' exists in dict.Drivers");
-                    continue;
+                    try
+                    {
+                        p.SetValue(table, driverObj, null);
+                        r.Messages.Add(tableTag + ".driver via " + propName + " (borrowed ref) -> " + newDriver);
+                        KickTableDirty(table, r, tableTag);
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                        r.Messages.Add(tableTag + ".driver: " + propName + " ref setter threw " + inner.GetType().Name + " " + inner.Message);
+                    }
                 }
-                if (!p.PropertyType.IsAssignableFrom(driverObj.GetType()))
-                {
-                    r.Messages.Add(tableTag + ".driver: found driver '" + newDriver + "' (" + driverObj.GetType().Name + ") but it's not assignable to " + propName + " (" + p.PropertyType.Name + ")");
-                    continue;
-                }
-                try
-                {
-                    p.SetValue(table, driverObj, null);
-                    r.Messages.Add(tableTag + ".driver via " + propName + " (ref setter) -> " + newDriver);
-                    // Fire the same dirty/notify path string mutations use.
-                    FieldMutator.SetStringProp(table, "OwnerName",
-                        DictModel.AsString(DictModel.GetProp(table, "OwnerName")) ?? "",
-                        r, tableTag + ".driver.kick");
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
-                    r.Messages.Add(tableTag + ".driver: " + propName + " ref setter threw " + inner.GetType().Name + " " + inner.Message);
-                }
+            }
+
+            // Path 3: write the driverString backing field + null out the driver
+            // ref so Clarion re-resolves it. This is the "set it by token" path.
+            if (TrySetDriverByStringField(table, newDriver, r, tableTag))
+            {
+                KickTableDirty(table, r, tableTag);
+                return true;
             }
 
             DumpDriverPropertyShape(table, r, tableTag);
             return false;
         }
 
-        object FindDriverByName(string name)
+        // Look for a table in the dict that's already on the target driver and
+        // grab its FileDriver reference so we can reuse it. Returns null if no
+        // such sibling exists.
+        object BorrowFileDriverFromSiblingTable(string newDriver)
         {
-            if (dict == null || string.IsNullOrEmpty(name)) return null;
-            foreach (var collName in new[] { "Drivers", "FileDrivers", "DriverCollection", "DriverList" })
+            foreach (var t in tables)
             {
-                var coll = DictModel.GetProp(dict, collName) as IEnumerable;
-                if (coll == null) continue;
-                foreach (var d in coll)
-                {
-                    if (d == null) continue;
-                    var dn = DictModel.AsString(DictModel.GetProp(d, "Name"))
-                          ?? DictModel.AsString(DictModel.GetProp(d, "DriverName"))
-                          ?? DictModel.AsString(DictModel.GetProp(d, "Label"));
-                    if (string.Equals(dn, name, StringComparison.OrdinalIgnoreCase)) return d;
-                }
+                var drv = DictModel.AsString(DictModel.GetProp(t, "FileDriverName"));
+                if (!string.Equals(drv, newDriver, StringComparison.OrdinalIgnoreCase)) continue;
+                var fd = DictModel.GetProp(t, "FileDriver");
+                if (fd != null) return fd;
             }
             return null;
+        }
+
+        // Write the driverString backing field on the table to the new driver
+        // name, and null out the driver ref so Clarion re-resolves it. Returns
+        // true if at least one of those writes landed. This is the fallback
+        // when no sibling FileDriver ref can be borrowed.
+        bool TrySetDriverByStringField(object table, string newDriver, FieldMutator.Result r, string tableTag)
+        {
+            bool stringOk = false, refCleared = false;
+            var t = table.GetType();
+            while (t != null && t != typeof(object))
+            {
+                foreach (var f in t.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    if (!stringOk && f.FieldType == typeof(string)
+                        && string.Equals(f.Name, "driverString", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try { f.SetValue(table, newDriver); stringOk = true; }
+                        catch (Exception ex)
+                        {
+                            var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                            r.Messages.Add(tableTag + ".driver: driverString write threw " + inner.GetType().Name + " " + inner.Message);
+                        }
+                    }
+                    if (!refCleared
+                        && string.Equals(f.Name, "driver", StringComparison.OrdinalIgnoreCase)
+                        && !f.FieldType.IsValueType)
+                    {
+                        try { f.SetValue(table, null); refCleared = true; }
+                        catch { /* non-fatal — stringOk alone is enough */ }
+                    }
+                }
+                t = t.BaseType;
+            }
+            if (stringOk)
+            {
+                r.Messages.Add(tableTag + ".driver via driverString backing field -> " + newDriver
+                              + (refCleared ? " (driver ref cleared)" : " (driver ref not cleared)"));
+            }
+            return stringOk;
+        }
+
+        // After a direct ref/field write the standard notify pipeline hasn't run,
+        // so poke OwnerName back into itself to reuse SetStringProp's dirty path.
+        void KickTableDirty(object table, FieldMutator.Result r, string tableTag)
+        {
+            var owner = DictModel.AsString(DictModel.GetProp(table, "OwnerName")) ?? "";
+            FieldMutator.SetStringProp(table, "OwnerName", owner, r, tableTag + ".driver.kick");
         }
 
         void DumpDriverPropertyShape(object table, FieldMutator.Result r, string tag)
