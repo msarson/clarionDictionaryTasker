@@ -303,12 +303,18 @@ namespace ClarionDctAddin
             grp.Controls.Add(txtOwner);
             row++;
 
-            var lblFn = new Label { Text = "Full name:", Left = 10, Top = topBase + row * gap + 2, Width = 110, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
             chkCopyLabelToFullName = new CheckBox
             {
+                Text = "Full name:",
+                Left = 10, Top = topBase + row * gap + 2,
+                Width = 120, AutoSize = false, Checked = true,
+                Font = new Font("Segoe UI", 9F)
+            };
+            var lblFnDesc = new Label
+            {
                 Text = "Copy table Label with schema prefix:",
-                Left = 124, Top = topBase + row * gap + 2,
-                AutoSize = true, Checked = true,
+                Left = 134, Top = topBase + row * gap + 4,
+                AutoSize = true,
                 Font = new Font("Segoe UI", 9F)
             };
             txtSchemaPrefix = new TextBox
@@ -318,14 +324,19 @@ namespace ClarionDctAddin
                 Text = "dbo.",
                 Font = new Font("Consolas", 9.5F)
             };
-            grp.Controls.Add(lblFn);
+            chkCopyLabelToFullName.CheckedChanged += delegate
+            {
+                lblFnDesc.Enabled       = chkCopyLabelToFullName.Checked;
+                txtSchemaPrefix.Enabled = chkCopyLabelToFullName.Checked;
+            };
             grp.Controls.Add(chkCopyLabelToFullName);
+            grp.Controls.Add(lblFnDesc);
             grp.Controls.Add(txtSchemaPrefix);
             row++;
 
             var note = new Label
             {
-                Text = "Uncheck Driver Options or Owner Name to leave that property unchanged on each table.",
+                Text = "Uncheck Driver Options, Owner Name, or Full Name to leave that property unchanged on each table.",
                 Left = 10, Top = topBase + row * gap + 2,
                 Width = 560, AutoSize = false, Height = 18,
                 ForeColor = MutedColor,
