@@ -734,6 +734,11 @@ namespace ClarionDctAddin
             // back over our DDFile changes and the table reverts.
             CloseOpenTableEditors(r);
 
+            // Belt-and-braces: flush any pending UI state back to the model
+            // BEFORE we mutate, so user-typed but uncommitted widget values
+            // don't get lost. This also gives us a consistent baseline.
+            FlushLiveEditorsToModel(r);
+
             int totalOk = 0, totalFail = 0;
             foreach (var p in currentPlan)
             {
@@ -752,6 +757,13 @@ namespace ClarionDctAddin
                 if (okLocal > 0) r.Changed++;
                 if (okLocal == 0 && failLocal > 0) r.Failed++;
             }
+            // After mutation: force every live editor bound to a target table
+            // to refresh its widgets from the (now-updated) model. On save,
+            // AcceptChanges will then flush the NEW values back instead of the
+            // stale pre-mutation snapshot the editor loaded when the user
+            // first clicked the table.
+            RebindLiveEditorsToModel(r);
+
             FieldMutator.ForceMarkDirty(dict, DictModel.GetActiveDictionaryView(), r);
 
             var summary = new StringBuilder();
@@ -1057,7 +1069,7 @@ namespace ClarionDctAddin
                     r.Messages.Add("close form " + tfn + " threw " + ex.GetType().Name + " " + ex.Message);
                 }
             }
-            if (formsClosed > 0) r.Messages.Add("Closed " + formsClosed + " open TableForm/TableEditor window(s).");
+            r.Messages.Add("Application.OpenForms walk: closed " + formsClosed + " form(s). Total forms seen: " + snapshot.Count + ".");
 
             // 3. DCTExplorer.RefreshIfSelected — nudge the tree to re-read each
             // target's display if the user has it selected in the sidebar.
@@ -1075,7 +1087,7 @@ namespace ClarionDctAddin
                             try { mRefresh.Invoke(explorer, new object[] { p.Table }); refreshed++; }
                             catch { /* non-fatal */ }
                         }
-                        if (refreshed > 0) r.Messages.Add("DCTExplorer.RefreshIfSelected called for " + refreshed + " table(s).");
+                        r.Messages.Add("DCTExplorer.RefreshIfSelected ran " + refreshed + "/" + currentPlan.Count + " time(s).");
                     }
                 }
             }
@@ -1092,6 +1104,117 @@ namespace ClarionDctAddin
                 if (hit != null) return hit;
             }
             return null;
+        }
+
+        // Walk every accessible control — DCTContent's Control tree plus every
+        // Application.OpenForms — and collect any TableEditor / BaseFileEditor
+        // / EntityEditor whose File is one of our target DDFile refs.
+        List<Control> FindLiveTargetEditors()
+        {
+            var list = new List<Control>();
+            var tableSet = new HashSet<object>(currentPlan.Select(p => p.Table).Where(x => x != null));
+
+            void Walk(Control c)
+            {
+                if (c == null) return;
+                var tn = c.GetType().FullName ?? "";
+                if (tn.EndsWith("TableEditor") || tn.EndsWith("BaseFileEditor") || tn.EndsWith("FileEditor"))
+                {
+                    var file = DictModel.GetProp(c, "File");
+                    if (file != null && tableSet.Contains(file)) list.Add(c);
+                }
+                foreach (Control ch in c.Controls) Walk(ch);
+            }
+
+            var view = DictModel.GetActiveDictionaryView();
+            var rootCtrl = view == null ? null : DictModel.GetProp(view, "Control") as Control;
+            if (rootCtrl != null) Walk(rootCtrl);
+            foreach (Form f in Application.OpenForms)
+            {
+                if (f == null || f.IsDisposed || f == this) continue;
+                Walk(f);
+            }
+            return list;
+        }
+
+        // Pre-mutation: flush any pending widget values back into the model so
+        // uncommitted edits don't get clobbered by our mutation.
+        // EntityEditor has `internal bool AcceptChanges()` and
+        // `protected void UpdateRecord()` — we try both via reflection.
+        void FlushLiveEditorsToModel(FieldMutator.Result r)
+        {
+            var editors = FindLiveTargetEditors();
+            r.Messages.Add("pre-flush: found " + editors.Count + " live editor(s) bound to target tables.");
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            int flushed = 0;
+            foreach (var e in editors)
+            {
+                bool any = false;
+                foreach (var name in new[] { "AcceptChanges", "UpdateRecord" })
+                {
+                    var m = e.GetType().GetMethod(name, flags, null, Type.EmptyTypes, null);
+                    if (m == null) continue;
+                    try { m.Invoke(e, null); any = true; break; }
+                    catch { /* try next */ }
+                }
+                if (any) flushed++;
+            }
+            if (editors.Count > 0) r.Messages.Add("pre-flush: flushed " + flushed + "/" + editors.Count + " via AcceptChanges/UpdateRecord.");
+        }
+
+        // Post-mutation: rebind every live editor to its DDItem so the widgets
+        // reload from the (now-updated) model. EntityEditor.Init(DataDictionaryItem,
+        // bool) is the standard entry point; if that's not found, fall back to
+        // writing the File property to itself (some editor hierarchies re-bind
+        // on property set).
+        void RebindLiveEditorsToModel(FieldMutator.Result r)
+        {
+            var editors = FindLiveTargetEditors();
+            r.Messages.Add("post-rebind: found " + editors.Count + " live editor(s) bound to target tables.");
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            int rebound = 0;
+            foreach (var e in editors)
+            {
+                var ddItem = DictModel.GetProp(e, "DDItem");
+                bool ok = false;
+
+                if (ddItem != null)
+                {
+                    var initMethods = e.GetType().GetMethods(flags)
+                        .Where(m => m.Name == "Init")
+                        .Where(m => m.GetParameters().Length == 2
+                                 && m.GetParameters()[1].ParameterType == typeof(bool))
+                        .ToList();
+                    foreach (var init in initMethods)
+                    {
+                        foreach (var flag in new[] { false, true })
+                        {
+                            try { init.Invoke(e, new object[] { ddItem, flag }); ok = true; break; }
+                            catch { /* try next */ }
+                        }
+                        if (ok) break;
+                    }
+                }
+
+                // Fallback: clear + set File prop to itself.
+                if (!ok)
+                {
+                    var fileProp = e.GetType().GetProperty("File", flags);
+                    if (fileProp != null && fileProp.CanWrite)
+                    {
+                        var file = fileProp.GetValue(e, null);
+                        try { fileProp.SetValue(e, file, null); ok = true; } catch { }
+                    }
+                }
+
+                // Clear dirty if possible — otherwise save may think we have
+                // pending changes for the editor that are actually committed.
+                var mClear = e.GetType().GetMethod("ClearDirty", flags, null, Type.EmptyTypes, null);
+                if (mClear != null) { try { mClear.Invoke(e, null); } catch { } }
+
+                if (ok) rebound++;
+            }
+            if (editors.Count > 0) r.Messages.Add("post-rebind: rebound " + rebound + "/" + editors.Count + ".");
         }
 
         void DumpDriverPropertyShape(object table, FieldMutator.Result r, string tag)
