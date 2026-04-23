@@ -59,13 +59,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 ; Payload goes into every selected Clarion's addin folder. Each entry is
 ; gated by a Check: function so we only copy where the user asked.
-Source: "{#RepoRoot}ClarionDctAddin\bin\Debug\{#AppExeName}";   DestDir: "{code:GetC12AddinFolder}"; Flags: ignoreversion; Check: InstallForC12
+Source: "{#RepoRoot}ClarionDctAddin\bin\Release\{#AppExeName}";   DestDir: "{code:GetC12AddinFolder}"; Flags: ignoreversion; Check: InstallForC12
 Source: "{#RepoRoot}ClarionDctAddin\{#AppManifest}";             DestDir: "{code:GetC12AddinFolder}"; Flags: ignoreversion; Check: InstallForC12
-Source: "{#RepoRoot}ClarionDctAddin\bin\Debug\{#AppExeName}";   DestDir: "{code:GetC111AddinFolder}"; Flags: ignoreversion; Check: InstallForC111
+Source: "{#RepoRoot}ClarionDctAddin\bin\Release\{#AppExeName}";   DestDir: "{code:GetC111AddinFolder}"; Flags: ignoreversion; Check: InstallForC111
 Source: "{#RepoRoot}ClarionDctAddin\{#AppManifest}";             DestDir: "{code:GetC111AddinFolder}"; Flags: ignoreversion; Check: InstallForC111
-Source: "{#RepoRoot}ClarionDctAddin\bin\Debug\{#AppExeName}";   DestDir: "{code:GetC11AddinFolder}"; Flags: ignoreversion; Check: InstallForC11
+Source: "{#RepoRoot}ClarionDctAddin\bin\Release\{#AppExeName}";   DestDir: "{code:GetC11AddinFolder}"; Flags: ignoreversion; Check: InstallForC11
 Source: "{#RepoRoot}ClarionDctAddin\{#AppManifest}";             DestDir: "{code:GetC11AddinFolder}"; Flags: ignoreversion; Check: InstallForC11
-Source: "{#RepoRoot}ClarionDctAddin\bin\Debug\{#AppExeName}";   DestDir: "{code:GetC10AddinFolder}"; Flags: ignoreversion; Check: InstallForC10
+Source: "{#RepoRoot}ClarionDctAddin\bin\Release\{#AppExeName}";   DestDir: "{code:GetC10AddinFolder}"; Flags: ignoreversion; Check: InstallForC10
 Source: "{#RepoRoot}ClarionDctAddin\{#AppManifest}";             DestDir: "{code:GetC10AddinFolder}"; Flags: ignoreversion; Check: InstallForC10
 ; Stub file for Inno's uninstaller anchor -- lands in whichever folder
 ; ends up being {app} (see CurStepChanged below).

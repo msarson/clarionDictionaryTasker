@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-rem Build the Debug DLL, bump the patch version in install\VERSION.txt,
+rem Build the Release DLL, bump the patch version in install\VERSION.txt,
 rem then compile the Inno Setup script into install\dist\DictionaryTasker-Setup.exe.
 rem
 rem The patch bump means every re-run of this script produces an installer
@@ -10,15 +10,27 @@ rem header, the .exe metadata) always reflects that the bits have changed --
 rem no more sitting at 1.0.0 while the binary silently updates.
 
 set ROOT=%~dp0..
-set DLL=%ROOT%\ClarionDctAddin\bin\Debug\ClarionDctAddin.dll
+set CSPROJ=%ROOT%\ClarionDctAddin\ClarionDctAddin.csproj
+set DLL=%ROOT%\ClarionDctAddin\bin\Release\ClarionDctAddin.dll
 set ISS=%~dp0setup.iss
 set VERFILE=%~dp0VERSION.txt
 
-rem --- 1. make sure the DLL exists -------------------------------------------
-if not exist "%DLL%" (
-  echo Build output not found: %DLL%
+rem --- 1. compile a fresh Release build --------------------------------------
+rem Previous versions of this script only CHECKED for a DLL sitting in
+rem bin\Release; if the dev cycle had last compiled Debug (or the Release
+rem output was stale) the installer shipped outdated bits. Compile explicitly
+rem so the installer always bundles what HEAD produces.
+echo Building Release DLL...
+dotnet build -c Release "%CSPROJ%"
+if errorlevel 1 (
   echo.
-  echo Run "dotnet build -c Debug" first ^(or build the .sln in Visual Studio^).
+  echo dotnet build failed -- aborting installer build.
+  exit /b 1
+)
+
+if not exist "%DLL%" (
+  echo Build output missing after compile: %DLL%
+  echo Check the build log above for errors.
   exit /b 1
 )
 
