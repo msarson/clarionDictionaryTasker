@@ -171,6 +171,10 @@ namespace ClarionDctAddin
                               Description = "Pick one or many tables and wipe the EXTERNAL NAME on every key in them. For projects with no SQL backend the per-key external name is noise. Preview lists affected keys; a .DCT backup is written before applying.",
                               Implemented = true,
                               OnClick = delegate { OpenClearKeyExternalNames(); } },
+                new ToolDef { Name = "Search and replace fields (Bruce's new drivers)",
+                              Description = "Match fields across the whole dictionary by data type / label / table / current External Name, then bulk-rewrite the pipe-separated External Name: set or remove extended attributes (NOTNULL, DEFAULT=, SQLTYPE=, UUID7, VALIDATE(...), WATCH, ...). Additive mode keeps existing attrs; Rewrite mode drops everything not explicitly set. Preview before/after per field; .DCT backup written on Apply.",
+                              Implemented = true,
+                              OnClick = delegate { OpenSearchReplaceFields(); } },
             }));
 
             body.Controls.Add(MakeSection("Visualization", new[]
@@ -421,6 +425,13 @@ namespace ClarionDctAddin
         {
             Hide();
             using (var dlg = new BatchClearKeyExternalNamesDialog(dict)) dlg.ShowDialog(this);
+            Show();
+        }
+
+        void OpenSearchReplaceFields()
+        {
+            Hide();
+            using (var dlg = new SearchReplaceFieldsDialog(dict)) dlg.ShowDialog(this);
             Show();
         }
     }
