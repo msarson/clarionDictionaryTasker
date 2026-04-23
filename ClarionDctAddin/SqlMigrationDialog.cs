@@ -46,7 +46,9 @@ namespace ClarionDctAddin
         CheckBox chkExcludeAliases;
 
         ComboBox cboNewDriver;
+        CheckBox chkApplyDriverOptions;
         TextBox  txtDriverOptions;
+        CheckBox chkApplyOwner;
         TextBox  txtOwner;
         CheckBox chkCopyLabelToFullName;
         TextBox  txtSchemaPrefix;
@@ -273,17 +275,31 @@ namespace ClarionDctAddin
             grp.Controls.Add(cboNewDriver);
             row++;
 
-            var lblOpts = new Label { Text = "Driver options:", Left = 10, Top = topBase + row * gap + 2, Width = 110, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
-            txtDriverOptions = new TextBox { Left = 124, Top = topBase + row * gap, Width = 420, Font = new Font("Consolas", 9.5F) };
+            chkApplyDriverOptions = new CheckBox
+            {
+                Text = "Driver options:",
+                Left = 10, Top = topBase + row * gap + 2,
+                Width = 120, AutoSize = false, Checked = true,
+                Font = new Font("Segoe UI", 9F)
+            };
+            txtDriverOptions = new TextBox { Left = 134, Top = topBase + row * gap, Width = 410, Font = new Font("Consolas", 9.5F) };
             txtDriverOptions.Text = "!glo:driveroptions";
-            grp.Controls.Add(lblOpts);
+            chkApplyDriverOptions.CheckedChanged += delegate { txtDriverOptions.Enabled = chkApplyDriverOptions.Checked; };
+            grp.Controls.Add(chkApplyDriverOptions);
             grp.Controls.Add(txtDriverOptions);
             row++;
 
-            var lblOwn = new Label { Text = "Owner name:", Left = 10, Top = topBase + row * gap + 2, Width = 110, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
-            txtOwner = new TextBox { Left = 124, Top = topBase + row * gap, Width = 420, Font = new Font("Consolas", 9.5F) };
+            chkApplyOwner = new CheckBox
+            {
+                Text = "Owner name:",
+                Left = 10, Top = topBase + row * gap + 2,
+                Width = 120, AutoSize = false, Checked = true,
+                Font = new Font("Segoe UI", 9F)
+            };
+            txtOwner = new TextBox { Left = 134, Top = topBase + row * gap, Width = 410, Font = new Font("Consolas", 9.5F) };
             txtOwner.Text = "!glo:owner";
-            grp.Controls.Add(lblOwn);
+            chkApplyOwner.CheckedChanged += delegate { txtOwner.Enabled = chkApplyOwner.Checked; };
+            grp.Controls.Add(chkApplyOwner);
             grp.Controls.Add(txtOwner);
             row++;
 
@@ -309,9 +325,9 @@ namespace ClarionDctAddin
 
             var note = new Label
             {
-                Text = "Leave Driver Options / Owner Name blank to keep the current value on each table.",
+                Text = "Uncheck Driver Options or Owner Name to leave that property unchanged on each table.",
                 Left = 10, Top = topBase + row * gap + 2,
-                Width = 540, AutoSize = false, Height = 18,
+                Width = 560, AutoSize = false, Height = 18,
                 ForeColor = MutedColor,
                 Font = new Font("Segoe UI", 8.5F)
             };
@@ -608,6 +624,8 @@ namespace ClarionDctAddin
             }
 
             var newDriver   = (cboNewDriver.Text ?? "").Trim();
+            bool applyOptions = chkApplyDriverOptions.Checked;
+            bool applyOwner   = chkApplyOwner.Checked;
             var newOptions  = (txtDriverOptions.Text ?? "");
             var newOwner    = (txtOwner.Text ?? "");
             bool copyLabel  = chkCopyLabelToFullName.Checked;
@@ -636,8 +654,8 @@ namespace ClarionDctAddin
                 plan.BeforeBindable = bindableAvailable ? ReadBool(t, "Bindable") : (bool?)null;
 
                 plan.AfterDriver   = string.IsNullOrEmpty(newDriver) ? plan.BeforeDriver : newDriver;
-                plan.AfterOptions  = newOptions == "" ? plan.BeforeOptions : newOptions;
-                plan.AfterOwner    = newOwner   == "" ? plan.BeforeOwner   : newOwner;
+                plan.AfterOptions  = applyOptions ? newOptions : plan.BeforeOptions;
+                plan.AfterOwner    = applyOwner   ? newOwner   : plan.BeforeOwner;
                 plan.AfterFullName = copyLabel ? (schema + tLabel) : plan.BeforeFullName;
 
                 plan.AfterCreate   = MergeTri(plan.BeforeCreate,   triCreate);
