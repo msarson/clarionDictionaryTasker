@@ -792,6 +792,12 @@ namespace ClarionDctAddin
             // the NEW driver instead of the stale buffer.
             RestoreSelection(r, capturedSelection, capturedDCTContent);
 
+            // Force the quick-view panel (the table summary shown when a
+            // table is selected in the tree) to re-read from each target's
+            // now-updated model. This is what Clarion itself uses when an
+            // item is updated — DCTContent.RefreshQuickView(DDBaseFile).
+            RefreshQuickViewForTargets(r);
+
             FieldMutator.ForceMarkDirty(dict, DictModel.GetActiveDictionaryView(), r);
 
             var summary = new StringBuilder();
@@ -1226,6 +1232,36 @@ namespace ClarionDctAddin
             }
         }
 
+        // Ask DCTContent to re-read every target's quick-view panel from the
+        // (now-mutated) model. RefreshQuickView(DDBaseFile) is Clarion's own
+        // "this file changed, refresh its summary display" entry point and
+        // should update whatever widget/cache is driving the displayed value
+        // that's getting saved.
+        void RefreshQuickViewForTargets(FieldMutator.Result r)
+        {
+            var view = DictModel.GetActiveDictionaryView();
+            if (view == null) return;
+            var control = DictModel.GetProp(view, "Control");
+            if (control == null) return;
+
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var m = control.GetType().GetMethod("RefreshQuickView", flags);
+            if (m == null) { r.Messages.Add("RefreshQuickView: method not found on " + control.GetType().FullName); return; }
+
+            int ok = 0, fail = 0;
+            foreach (var p in currentPlan)
+            {
+                try { m.Invoke(control, new object[] { p.Table }); ok++; }
+                catch (Exception ex)
+                {
+                    var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                    r.Messages.Add("RefreshQuickView threw " + inner.GetType().Name + " " + inner.Message);
+                    fail++;
+                }
+            }
+            r.Messages.Add("RefreshQuickView: " + ok + " ok, " + fail + " failed.");
+        }
+
         // A DataDictionaryItem is a tree-display wrapper. For a table node it
         // holds a reference to the DDFile on some property whose name varies
         // by Clarion build — probe the usual candidates.
@@ -1247,8 +1283,11 @@ namespace ClarionDctAddin
         }
 
         // Walk every accessible control — DCTContent's Control tree plus every
-        // Application.OpenForms — and collect any TableEditor / BaseFileEditor
-        // / EntityEditor whose File is one of our target DDFile refs.
+        // Application.OpenForms — and collect any control whose File or DDItem
+        // property points at one of our target DDFile refs. Filter by PROPERTY
+        // MATCH rather than type name so we pick up QuickView panels,
+        // EntityEditor subclasses we didn't explicitly name, and any custom
+        // binding surface added in newer Clarion builds.
         List<Control> FindLiveTargetEditors()
         {
             var list = new List<Control>();
@@ -1257,12 +1296,13 @@ namespace ClarionDctAddin
             void Walk(Control c)
             {
                 if (c == null) return;
-                var tn = c.GetType().FullName ?? "";
-                if (tn.EndsWith("TableEditor") || tn.EndsWith("BaseFileEditor") || tn.EndsWith("FileEditor"))
+                var file = DictModel.GetProp(c, "File");
+                if (file == null)
                 {
-                    var file = DictModel.GetProp(c, "File");
-                    if (file != null && tableSet.Contains(file)) list.Add(c);
+                    var ddItem = DictModel.GetProp(c, "DDItem");
+                    if (ddItem != null) file = ResolveDDFileFromDataDictionaryItem(ddItem);
                 }
+                if (file != null && tableSet.Contains(file)) list.Add(c);
                 foreach (Control ch in c.Controls) Walk(ch);
             }
 
