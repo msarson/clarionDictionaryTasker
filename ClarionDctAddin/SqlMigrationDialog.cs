@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -263,15 +264,11 @@ namespace ClarionDctAddin
             var lblDrv = new Label { Text = "New driver:", Left = 10, Top = topBase + row * gap + 2, Width = 110, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
             cboNewDriver = new ComboBox
             {
-                Left = 124, Top = topBase + row * gap, Width = 200,
+                Left = 124, Top = topBase + row * gap, Width = 260,
                 DropDownStyle = ComboBoxStyle.DropDown,
                 Font = new Font("Segoe UI", 9.5F)
             };
-            cboNewDriver.Items.AddRange(new object[] {
-                "MSSQL", "MSSQL2", "ODBC", "ADO", "SQLite", "SQLite2", "Oracle",
-                "TOPSPEED", "Btrieve", "Clarion", "Basic", "DOS", "ASCII"
-            });
-            cboNewDriver.SelectedIndex = 0;
+            PopulateNewDriverCombo();
             grp.Controls.Add(lblDrv);
             grp.Controls.Add(cboNewDriver);
             row++;
@@ -440,6 +437,91 @@ namespace ClarionDctAddin
         }
 
         const string AllDriversLabel = "(all drivers)";
+
+        // Canonical driver DLL -> driver token names as used in Clarion's DRIVER()
+        // statements and the .DCT driverString field. Only DLLs that are present
+        // on disk are surfaced; unknown Cla*.dll files on the system just aren't
+        // listed (the combo is editable so custom drivers still work by typing).
+        static readonly Dictionary<string, string> KnownDriverDlls =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "ClaADO",   "ADO" },
+            { "ClaASC",   "ASCII" },
+            { "ClaBAS",   "BASIC" },
+            { "ClaBTR",   "BTRIEVE" },
+            { "ClaCLA",   "CLARION" },
+            { "ClaCLP",   "CLIPPER" },
+            { "ClaDB3",   "DBASE3" },
+            { "ClaDB4",   "DBASE4" },
+            { "ClaDOS",   "DOS" },
+            { "ClaFOX",   "FOXPRO" },
+            { "ClaIBC",   "INTERBASE" },
+            { "ClaLIT",   "SQLITE" },
+            { "ClaMEM",   "MEMORY" },
+            { "ClaMSS",   "MSSQL" },
+            { "ClaODB",   "ODBC" },
+            { "ClaORA",   "ORACLE" },
+            { "ClaSCA",   "SCALEABLE" },
+            { "ClaSQA",   "SQLANY" },
+            { "ClaTPS",   "TOPSPEED" },
+            { "CLADOS2",  "DOS2" },
+            { "CLALIT2",  "SQLITE2" },
+            { "CLAMEM2",  "MEMORY2" },
+            { "CLAMSS2",  "MSSQL2" },
+        };
+
+        // Build the dropdown: union of drivers installed on disk (Cla*.dll
+        // matches in C:\clarion12\bin) + drivers already used by any table in
+        // the dict. Both sources are guaranteed to work — installed DLLs mean
+        // Clarion can resolve the driver on save/load; in-use drivers mean
+        // sibling-borrow will succeed immediately.
+        void PopulateNewDriverCombo()
+        {
+            var seen = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var d in EnumerateInstalledDrivers()) seen.Add(d);
+            foreach (var t in tables)
+            {
+                var drv = DictModel.AsString(DictModel.GetProp(t, "FileDriverName"));
+                if (!string.IsNullOrEmpty(drv)) seen.Add(drv);
+            }
+
+            cboNewDriver.Items.Clear();
+            foreach (var d in seen) cboNewDriver.Items.Add(d);
+            if (cboNewDriver.Items.Count == 0)
+            {
+                // Shouldn't happen in practice — but keep the combo usable.
+                cboNewDriver.Items.Add("MSSQL");
+            }
+            var mssqlIndex = cboNewDriver.Items.IndexOf("MSSQL");
+            cboNewDriver.SelectedIndex = mssqlIndex >= 0 ? mssqlIndex : 0;
+        }
+
+        static IEnumerable<string> EnumerateInstalledDrivers()
+        {
+            string[] binDirs =
+            {
+                @"C:\clarion12\bin",
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory ?? "", "")
+            };
+            foreach (var dir in binDirs)
+            {
+                if (string.IsNullOrEmpty(dir)) continue;
+                DirectoryInfo di;
+                try { di = new DirectoryInfo(dir); }
+                catch { continue; }
+                if (!di.Exists) continue;
+                FileInfo[] files;
+                try { files = di.GetFiles("Cla*.dll"); }
+                catch { continue; }
+                foreach (var f in files)
+                {
+                    var stem = Path.GetFileNameWithoutExtension(f.Name);
+                    string name;
+                    if (KnownDriverDlls.TryGetValue(stem, out name)) yield return name;
+                }
+            }
+        }
 
         void PopulateDriverFilter()
         {
@@ -722,13 +804,12 @@ namespace ClarionDctAddin
                     return true;
             }
 
-            // Path 2: reference-typed Driver / FileDriver property.
-            // SoftVelocity's DDFile has FileDriver:FileDriver RW but no dict-level
-            // Drivers collection. So instead of looking up a driver by name on the
-            // dict, find another table that's ALREADY on the target driver and
-            // borrow its FileDriver ref. If no such table exists, fall back to
-            // writing the driverString backing field directly (that's the raw
-            // token Clarion serializes to the .DCT — it'll re-resolve on load).
+            // Path 2: borrow a FileDriver ref from a sibling table already on the
+            // target driver. This keeps full in-memory coherence (the UI sees
+            // the new driver immediately) and the .DCT saves correctly.
+            // Only viable if another table in this dict is already using the
+            // target driver — which is why the combobox is populated from the
+            // in-use drivers union with installed-on-disk drivers.
             foreach (var propName in new[] { "FileDriver", "Driver" })
             {
                 var p = table.GetType().GetProperty(propName,
@@ -754,8 +835,10 @@ namespace ClarionDctAddin
                 }
             }
 
-            // Path 3: write the driverString backing field + null out the driver
-            // ref so Clarion re-resolves it. This is the "set it by token" path.
+            // Path 3: write the driverString backing field directly + null out
+            // the driver ref so Clarion re-resolves it. This is the "set it by
+            // token" path: Clarion serializes driverString to the .DCT and
+            // reconstructs the FileDriver ref on next load.
             if (TrySetDriverByStringField(table, newDriver, r, tableTag))
             {
                 KickTableDirty(table, r, tableTag);
