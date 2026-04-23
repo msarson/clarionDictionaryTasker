@@ -41,6 +41,13 @@ namespace ClarionDctAddin
         CheckBox chkExcludeAliases;
         Label    lblTablesSummary;
 
+        // Session-scoped set of table names the user has checked. Persisted in
+        // Settings on FormClosing, restored on construct. Using a separate set
+        // (rather than just lvTables.CheckedItems) means refiltering the list
+        // doesn't lose a table's checked state when it scrolls out of view.
+        readonly HashSet<string> sessionCheckedTableNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool suppressCheckTracking;
+
         // Match pane
         CheckedListBox clbTypes;
         TextBox  txtLabelPattern;
@@ -151,7 +158,9 @@ namespace ClarionDctAddin
                 .ToList();
             BuildUi();
             PopulateDriverFilter();
-            PopulateTables();
+            LoadSettingsIntoUi();           // restore per-user state BEFORE populating the list
+            PopulateTables();               // picks up driver filter + restored checked set
+            this.FormClosing += delegate { SaveUiToSettings(); };
         }
 
         void BuildUi()
@@ -305,7 +314,19 @@ namespace ClarionDctAddin
             lvTables.Columns.Add("Prefix",  70);
             lvTables.Columns.Add("Driver",  90);
             lvTables.Columns.Add("Fields",  60, HorizontalAlignment.Right);
-            lvTables.ItemChecked += delegate { UpdateTablesSummary(); };
+            lvTables.ItemChecked += (s, e) =>
+            {
+                if (!suppressCheckTracking && e.Item != null && e.Item.Tag != null)
+                {
+                    var tName = DictModel.AsString(DictModel.GetProp(e.Item.Tag, "Name")) ?? "";
+                    if (!string.IsNullOrEmpty(tName))
+                    {
+                        if (e.Item.Checked) sessionCheckedTableNames.Add(tName);
+                        else                sessionCheckedTableNames.Remove(tName);
+                    }
+                }
+                UpdateTablesSummary();
+            };
 
             lblTablesSummary = new Label
             {
@@ -370,26 +391,35 @@ namespace ClarionDctAddin
                 driverFilter = cboDriverFilter.SelectedItem.ToString();
             }
 
-            lvTables.BeginUpdate();
-            lvTables.Items.Clear();
-            foreach (var t in tables)
+            suppressCheckTracking = true;
+            try
             {
-                if (excludeAliases && DictModel.IsAlias(t)) continue;
-                var name = DictModel.AsString(DictModel.GetProp(t, "Name")) ?? "?";
-                if (filter.Length > 0 && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                var prefix = DictModel.AsString(DictModel.GetProp(t, "Prefix")) ?? "";
-                var drv    = DictModel.AsString(DictModel.GetProp(t, "FileDriverName")) ?? "";
-                if (driverFilter != null && !string.Equals(drv, driverFilter, StringComparison.OrdinalIgnoreCase)) continue;
+                lvTables.BeginUpdate();
+                lvTables.Items.Clear();
+                foreach (var t in tables)
+                {
+                    if (excludeAliases && DictModel.IsAlias(t)) continue;
+                    var name = DictModel.AsString(DictModel.GetProp(t, "Name")) ?? "?";
+                    if (filter.Length > 0 && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var prefix = DictModel.AsString(DictModel.GetProp(t, "Prefix")) ?? "";
+                    var drv    = DictModel.AsString(DictModel.GetProp(t, "FileDriverName")) ?? "";
+                    if (driverFilter != null && !string.Equals(drv, driverFilter, StringComparison.OrdinalIgnoreCase)) continue;
 
-                int fieldCount = 0;
-                foreach (var _ in FieldMutator.EnumerateFields(t)) fieldCount++;
+                    int fieldCount = 0;
+                    foreach (var _ in FieldMutator.EnumerateFields(t)) fieldCount++;
 
-                var display = DictModel.IsAlias(t) ? name + "  (alias)" : name;
-                var item = new ListViewItem(new[] { display, prefix, drv, fieldCount.ToString() });
-                item.Tag = t;
-                lvTables.Items.Add(item);
+                    var display = DictModel.IsAlias(t) ? name + "  (alias)" : name;
+                    var item = new ListViewItem(new[] { display, prefix, drv, fieldCount.ToString() });
+                    item.Tag = t;
+                    if (sessionCheckedTableNames.Contains(name)) item.Checked = true;
+                    lvTables.Items.Add(item);
+                }
+                lvTables.EndUpdate();
             }
-            lvTables.EndUpdate();
+            finally
+            {
+                suppressCheckTracking = false;
+            }
             UpdateTablesSummary();
         }
 
@@ -397,7 +427,140 @@ namespace ClarionDctAddin
         {
             int shown  = lvTables.Items.Count;
             int checkd = lvTables.CheckedItems.Count;
-            lblTablesSummary.Text = shown + " shown   ·   " + checkd + " checked   ·   " + tables.Count + " total in dictionary";
+            lblTablesSummary.Text = shown + " shown   ·   " + checkd + " checked   ·   " + sessionCheckedTableNames.Count + " remembered   ·   " + tables.Count + " total in dictionary";
+        }
+
+        // ---------- per-user persistence ----------
+
+        // Unit/record separators — won't appear in any real Clarion attribute
+        // token, so safe for joining attribute rules.
+        const char AttrFieldSep  = '';
+        const char AttrRecordSep = '';
+
+        void LoadSettingsIntoUi()
+        {
+            // Driver filter
+            var savedDriver = Settings.BruceDriverFilter ?? "";
+            if (!string.IsNullOrEmpty(savedDriver))
+            {
+                for (int i = 0; i < cboDriverFilter.Items.Count; i++)
+                {
+                    if (string.Equals(cboDriverFilter.Items[i] as string, savedDriver, StringComparison.OrdinalIgnoreCase))
+                    {
+                        cboDriverFilter.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            // Types multi-select
+            var savedTypes = (Settings.BruceTypes ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            var savedTypeSet = new HashSet<string>(savedTypes, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < clbTypes.Items.Count; i++)
+            {
+                var item = clbTypes.Items[i] as string ?? "";
+                if (savedTypeSet.Contains(item)) clbTypes.SetItemChecked(i, true);
+            }
+
+            // Regex + case sensitivity
+            txtLabelPattern.Text   = Settings.BruceLabelRegex ?? "";
+            txtExtNamePattern.Text = Settings.BruceExtRegex   ?? "";
+            chkIgnoreCase.Checked  = Settings.BruceIgnoreCase;
+
+            // Checked tables (session set, restored BEFORE PopulateTables so
+            // RebuildTableList picks them up).
+            sessionCheckedTableNames.Clear();
+            foreach (var n in (Settings.BruceCheckedTables ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var name = n.Trim();
+                if (name.Length > 0) sessionCheckedTableNames.Add(name);
+            }
+
+            // Base-name radio
+            switch (Settings.BruceBaseKind)
+            {
+                case 1: rbBaseLabel.Checked            = true; break;
+                case 2: rbBasePrefixColon.Checked      = true; break;
+                case 3: rbBasePrefixUnderscore.Checked = true; break;
+                case 4: rbBaseClear.Checked            = true; break;
+                case 5: rbBaseCustom.Checked           = true; break;
+                default: rbBaseLeave.Checked           = true; break;
+            }
+            txtBaseCustomTemplate.Text = Settings.BruceCustomTpl ?? "{prefix}_{label}";
+
+            // Merge mode
+            if (Settings.BruceMergeAdditive) rbMergeAdditive.Checked = true;
+            else                             rbMergeRewrite.Checked  = true;
+
+            // Attribute rules — blow away the seed empty row if we have saved rules
+            var serialized = Settings.BruceAttrRules ?? "";
+            if (!string.IsNullOrEmpty(serialized))
+            {
+                var existing = pnlAttrRules.Controls.Cast<Control>().ToList();
+                foreach (var c in existing) { pnlAttrRules.Controls.Remove(c); c.Dispose(); }
+
+                foreach (var record in serialized.Split(AttrRecordSep))
+                {
+                    if (string.IsNullOrEmpty(record)) continue;
+                    var fields = record.Split(AttrFieldSep);
+                    if (fields.Length < 3) continue;
+                    AddAttrRuleRow();
+                    var row = pnlAttrRules.Controls[pnlAttrRules.Controls.Count - 1] as AttrRuleRow;
+                    if (row == null) continue;
+                    row.CboAttr.Text = fields[0];
+                    var action = fields[1];
+                    if (action != "Set" && action != "Remove") action = "Set";
+                    row.CboAction.SelectedItem = action;
+                    row.TxtValue.Text = fields[2];
+                }
+                // Always leave at least one row so the user can type immediately.
+                if (pnlAttrRules.Controls.Count == 0) AddAttrRuleRow();
+            }
+        }
+
+        void SaveUiToSettings()
+        {
+            // Driver filter — empty string == "(all drivers)".
+            string driver = "";
+            if (cboDriverFilter != null && cboDriverFilter.SelectedIndex > 0)
+                driver = cboDriverFilter.SelectedItem as string ?? "";
+            Settings.BruceDriverFilter = driver;
+
+            // Types — comma-joined.
+            var checkedTypes = new List<string>();
+            foreach (var it in clbTypes.CheckedItems) checkedTypes.Add(it as string ?? "");
+            Settings.BruceTypes = string.Join(",", checkedTypes.ToArray());
+
+            Settings.BruceLabelRegex = txtLabelPattern.Text ?? "";
+            Settings.BruceExtRegex   = txtExtNamePattern.Text ?? "";
+            Settings.BruceIgnoreCase = chkIgnoreCase.Checked;
+
+            Settings.BruceCheckedTables = string.Join(",", sessionCheckedTableNames.ToArray());
+
+            int baseKind = 0;
+            if (rbBaseLabel.Checked)            baseKind = 1;
+            else if (rbBasePrefixColon.Checked) baseKind = 2;
+            else if (rbBasePrefixUnderscore.Checked) baseKind = 3;
+            else if (rbBaseClear.Checked)       baseKind = 4;
+            else if (rbBaseCustom.Checked)      baseKind = 5;
+            Settings.BruceBaseKind  = baseKind;
+            Settings.BruceCustomTpl = txtBaseCustomTemplate.Text ?? "";
+
+            Settings.BruceMergeAdditive = rbMergeAdditive.Checked;
+
+            // Attribute rules
+            var parts = new List<string>();
+            foreach (Control c in pnlAttrRules.Controls)
+            {
+                var row = c as AttrRuleRow;
+                if (row == null) continue;
+                var attr   = row.CboAttr.Text ?? "";
+                var action = (row.CboAction.SelectedItem as string) ?? "Set";
+                var value  = row.TxtValue.Text ?? "";
+                if (attr.Length == 0 && value.Length == 0) continue; // skip the always-seeded empty row
+                parts.Add(attr + AttrFieldSep + action + AttrFieldSep + value);
+            }
+            Settings.BruceAttrRules = string.Join(AttrRecordSep.ToString(), parts.ToArray());
         }
 
         Panel BuildMatchPane()

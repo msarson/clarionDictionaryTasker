@@ -45,6 +45,17 @@ namespace ClarionDctAddin
         const string KeyGlobalSearchTriggers   = "global_search_triggers";
         const string KeyGlobalSearchDescriptions = "global_search_descriptions";
 
+        const string KeyBruceDriverFilter     = "bruce_search_driver_filter";
+        const string KeyBruceTypes            = "bruce_search_types";
+        const string KeyBruceLabelRegex       = "bruce_search_label_regex";
+        const string KeyBruceExtRegex         = "bruce_search_ext_regex";
+        const string KeyBruceIgnoreCase       = "bruce_search_ignore_case";
+        const string KeyBruceCheckedTables    = "bruce_search_checked_tables";
+        const string KeyBruceBaseKind         = "bruce_replace_base_kind";
+        const string KeyBruceCustomTpl        = "bruce_replace_custom_tpl";
+        const string KeyBruceMergeAdditive    = "bruce_replace_merge_additive";
+        const string KeyBruceAttrRules        = "bruce_replace_attr_rules";
+
         static readonly string DataDir =
             Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -191,6 +202,19 @@ namespace ClarionDctAddin
         // fine for tables that stay TPS or that use a driver that doesn't need
         // index names. Default ON for back-compat; the lint report dialog toggles this.
         public static bool LintCheckEmptyExternalName { get { return GetBool(KeyLintCheckEmptyExternalName, true); } set { SetBool(KeyLintCheckEmptyExternalName, value); } }
+
+        // Search and replace fields (Bruce's new drivers) — every tunable on
+        // the dialog persists so a second open picks up where the first left off.
+        public static string BruceDriverFilter  { get { return Get(KeyBruceDriverFilter,  ""); } set { Set(KeyBruceDriverFilter,  value ?? ""); } }
+        public static string BruceTypes         { get { return Get(KeyBruceTypes,         ""); } set { Set(KeyBruceTypes,         value ?? ""); } }
+        public static string BruceLabelRegex    { get { return Get(KeyBruceLabelRegex,    ""); } set { Set(KeyBruceLabelRegex,    value ?? ""); } }
+        public static string BruceExtRegex      { get { return Get(KeyBruceExtRegex,      ""); } set { Set(KeyBruceExtRegex,      value ?? ""); } }
+        public static bool   BruceIgnoreCase    { get { return GetBool(KeyBruceIgnoreCase,  true); } set { SetBool(KeyBruceIgnoreCase,  value); } }
+        public static string BruceCheckedTables { get { return Get(KeyBruceCheckedTables, ""); } set { Set(KeyBruceCheckedTables, value ?? ""); } }
+        public static int    BruceBaseKind      { get { return GetInt(KeyBruceBaseKind,   0); } set { SetInt(KeyBruceBaseKind,   value); } }
+        public static string BruceCustomTpl     { get { return Get(KeyBruceCustomTpl,     "{prefix}_{label}"); } set { Set(KeyBruceCustomTpl, value ?? ""); } }
+        public static bool   BruceMergeAdditive { get { return GetBool(KeyBruceMergeAdditive, true); } set { SetBool(KeyBruceMergeAdditive, value); } }
+        public static string BruceAttrRules     { get { return Get(KeyBruceAttrRules,     ""); } set { Set(KeyBruceAttrRules,     value ?? ""); } }
 
         public static SqlDdlGenerator.Dialect PreferredDialect
         {
